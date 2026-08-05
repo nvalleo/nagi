@@ -1,0 +1,4 @@
+module CMozcMach [system] {
+    header "shim.h"
+    export *
+}

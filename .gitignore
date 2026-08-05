@@ -17,6 +17,7 @@ Package.resolved
 
 # Vendored Mozc protobufs (regenerated locally)
 poc/Sources/NagiMozcProto/Generated/
+poc/.mozc-proto/
 
 # Editors
 .vscode/

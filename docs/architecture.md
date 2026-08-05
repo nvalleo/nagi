@@ -37,8 +37,12 @@ Nagi.app/
 ```
 
 `mozc_server` is launched as a child process on first key event and kept alive
-for the session. The IPC endpoint is a Unix domain socket under
-`~/Library/Application Support/Nagi/ipc/`, following Mozc's convention.
+for the session. The IPC endpoint is **not** a Unix domain socket on macOS —
+see "Mozc IPC" below, confirmed against upstream source and verified
+end-to-end in [`poc/`](../poc) (M0). It's a Mach bootstrap service registered
+via launchd, under our own launchd label once we bundle our own
+`mozc_server` (M2); for now the PoC piggybacks on Google 日本語入力's
+`com.google.inputmethod.Japanese.Converter.session` service.
 
 ## OS integration: InputMethodKit
 
@@ -84,11 +88,34 @@ Mozc's client-side interface is defined in `protocol/commands.proto` (in
 2. Server responds with `Output` containing the updated preedit, candidate
    list, and any commit string.
 
+**Transport is Mach IPC, not a Unix domain socket — updated after M0.** The
+original plan here assumed a length-prefixed protobuf frame over a Unix
+socket, following what `src/ipc/` looked like at a glance. That's true for
+Linux (`unix_ipc.cc`, `#if defined(__linux__)`), but the mac build compiles
+`mach_ipc.cc` instead (`#ifdef __APPLE__`), which is a completely different
+transport:
+
+1. `bootstrap_look_up(bootstrap_port, "<launchd label>.Converter.session",
+   &port)` resolves the server's Mach bootstrap service, transparently
+   starting it via launchd on first lookup if it isn't already running.
+2. The client allocates a private receive port and sends a **complex Mach
+   message** carrying one out-of-line (OOL) memory descriptor with the
+   serialized `Input` bytes — the kernel handles framing/size, there is no
+   length prefix to write. `msgh_id` is Mozc's `IPC_PROTOCOL_VERSION` (`3`),
+   echoed back by the server.
+3. The client blocks on its receive port for the `Output` reply, also
+   delivered via an OOL descriptor.
+
 We implement this in Swift using
 [apple/swift-protobuf](https://github.com/apple/swift-protobuf) to generate
-message types from the upstream `.proto` files, and a small hand-rolled
-transport layer that speaks Mozc's socket framing (4-byte length prefix +
-serialized protobuf, following `src/ipc/`).
+message types from the upstream `.proto` files, and a small system-library
+shim (`CMozcMach`, see `poc/Sources/CMozcMach/`) exposing the Mach
+bootstrap APIs Swift's `Darwin` module doesn't import by default. Verified
+end-to-end against the installed Google 日本語入力 build in
+[`poc/`](../poc); see `poc/README.md` "Surprises" for the full write-up,
+including a Swift/Mach interop gotcha worth reading before touching this
+code (stale struct-field reads after `mach_msg()` unless you take the
+receive pointer over the whole message struct, not just its header field).
 
 ## Threading model
 
@@ -104,6 +131,9 @@ concern:
 
 1. **IPC protocol stability.** `commands.proto` is treated as internal by
    Mozc. We pin to a specific upstream tag and re-verify on each bump.
+   M0 confirmed Swift can drive the real (Mach-based, see "Mozc IPC" above)
+   transport end-to-end against an installed Google 日本語入力 build — this
+   risk is downgraded from "unproven" to "pin discipline going forward."
 2. **`mozc_server` bundling.** Building `mozc_server` for arm64 + x86_64 with
    the Mozc build system (Bazel-based, historically GYP) inside our release
    pipeline. Feasible, not trivial.
