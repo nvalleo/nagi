@@ -24,8 +24,14 @@ let package = Package(
             name: "NagiMozcIPC",
             dependencies: [
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
-                "NagiMozcProto"
+                "NagiMozcProto",
+                "CMozcMach"
             ]
+        ),
+        // System-library shim for the Mach bootstrap APIs Mozc's IPC uses
+        // on macOS. See Sources/CMozcMach/shim.h for why this exists.
+        .systemLibrary(
+            name: "CMozcMach"
         ),
         .target(
             name: "NagiMozcProto",

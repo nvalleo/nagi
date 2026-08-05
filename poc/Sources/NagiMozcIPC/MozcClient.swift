@@ -1,11 +1,11 @@
 // MozcClient — thin Swift wrapper over Mozc's IPC.
 //
-// This file is a *skeleton*. The real work in M0 is to fill in the four
-// TODOs below. Each TODO points at what needs to be figured out and where
-// in the Mozc source to look.
+// M0 finding: on macOS this is Mach IPC, not a Unix domain socket — see
+// MozcClient+MachIPC.swift for the transport and poc/README.md for the
+// write-up. This file owns the session/conversion protocol on top of it.
 
 import Foundation
-// import NagiMozcProto  // enable once protos have been generated
+import NagiMozcProto
 
 /// One converter session with a running mozc_server.
 public actor MozcClient {
@@ -15,45 +15,132 @@ public actor MozcClient {
         public let candidates: [String]
     }
 
-    public enum MozcError: Error {
+    public enum MozcError: Error, CustomStringConvertible, Sendable {
         case socketNotFound(path: String)
         case handshakeFailed(reason: String)
         case protocolError(String)
         case notImplemented(String)
+
+        public var description: String {
+            switch self {
+            case .socketNotFound(let path):
+                return "could not reach mozc_server: \(path)"
+            case .handshakeFailed(let reason):
+                return "session handshake failed: \(reason)"
+            case .protocolError(let message):
+                return "protocol error: \(message)"
+            case .notImplemented(let what):
+                return "not implemented: \(what)"
+            }
+        }
     }
 
-    // MARK: - Init
+    /// Mach bootstrap service name for mozc_server's session port.
+    ///
+    /// Hard-coded to the officially-installed Google 日本語入力 build for
+    /// M0, per the issue's "piggyback" instruction — this is the label
+    /// `GetMachPortName("session")` resolves to in mach_ipc.cc for that
+    /// build (confirmed locally with `launchctl list | grep inputmethod`).
+    /// Once nagi bundles its own mozc_server (M2), this becomes our own
+    /// launchd label instead, and this constant goes away.
+    public static let defaultServiceName = "com.google.inputmethod.Japanese.Converter.session"
 
-    public init() throws {
-        // TODO(M0-1): locate the mozc_server IPC socket.
-        //   Mozc's convention on macOS is a path under
-        //   ~/Library/Application Support/Google/JapaneseInput/
-        //   (for the official build) or a nagi-owned directory once we
-        //   bundle our own server. See src/ipc/ in google/mozc.
+    private let serviceName: String
+    private let callTimeout: TimeInterval
+
+    public init(
+        serviceName: String = MozcClient.defaultServiceName,
+        callTimeout: TimeInterval = 3.0
+    ) throws {
+        self.serviceName = serviceName
+        self.callTimeout = callTimeout
     }
 
     // MARK: - Session lifecycle
 
     public func createSession() async throws -> UInt64 {
-        // TODO(M0-2): send a CREATE_SESSION command, return the session id.
-        //   The request/response shape lives in commands.proto ->
-        //   Input/Output with input_type = CREATE_SESSION.
-        throw MozcError.notImplemented("createSession")
+        var input = Mozc_Commands_Input()
+        input.type = .createSession
+
+        let output = try await call(input)
+        guard output.hasID, output.id != 0 else {
+            throw MozcError.handshakeFailed(reason: "CREATE_SESSION returned no session id")
+        }
+        return output.id
     }
 
     public func deleteSession(_ id: UInt64) async throws {
-        // TODO(M0-3): send DELETE_SESSION for the given id.
-        throw MozcError.notImplemented("deleteSession")
+        var input = Mozc_Commands_Input()
+        input.type = .deleteSession
+        input.id = id
+        _ = try await call(input)
     }
 
     // MARK: - Conversion
 
     public func sendRomaji(_ romaji: String, session: UInt64) async throws -> ConversionResult {
-        // TODO(M0-4): translate the romaji string into a sequence of
-        //   SEND_KEY commands, collect the resulting Output messages, and
-        //   extract the current preedit + candidate list from the last
-        //   Output. See how Mozc's own renderer clients do this in
-        //   src/renderer/.
-        throw MozcError.notImplemented("sendRomaji")
+        var output = Mozc_Commands_Output()
+
+        // One SEND_KEY per character, exactly like a physical keystroke.
+        // The server's romaji-to-kana composer builds the hiragana preedit
+        // incrementally; we only need the very last Output.
+        for scalar in romaji.unicodeScalars {
+            guard scalar.isASCII else {
+                throw MozcError.protocolError(
+                    "non-ASCII romaji input isn't supported in M0: \(scalar)"
+                )
+            }
+
+            var input = Mozc_Commands_Input()
+            input.type = .sendKey
+            input.id = session
+            var key = Mozc_Commands_KeyEvent()
+            key.keyCode = scalar.value
+            input.key = key
+
+            output = try await call(input)
+        }
+
+        // SEND_KEY alone only ever produces a hiragana preedit — it does
+        // not populate candidates. Converting (what pressing Space does)
+        // is what turns that preedit into segments with a real candidate
+        // list, which is what the exit criterion in issue #2 expects.
+        var convert = Mozc_Commands_Input()
+        convert.type = .sendKey
+        convert.id = session
+        var spaceKey = Mozc_Commands_KeyEvent()
+        spaceKey.specialKey = .space
+        convert.key = spaceKey
+
+        output = try await call(convert)
+
+        // The rendered candidate_window only carries whatever page of
+        // candidates the (nonexistent, here) UI last scrolled to.
+        // all_candidate_words is the flat, complete list the server
+        // computed for this conversion — that's what CLI output should
+        // show.
+        let preedit = output.preedit.segment.map(\.value).joined()
+        let candidates = output.allCandidateWords.candidates.map(\.value)
+        return ConversionResult(preedit: preedit, candidates: candidates)
+    }
+
+    // MARK: - Transport
+
+    private func call(_ input: Mozc_Commands_Input) async throws -> Mozc_Commands_Output {
+        let requestData: Data
+        do {
+            requestData = try input.serializedData()
+        } catch {
+            throw MozcError.protocolError("failed to serialize Input: \(error)")
+        }
+
+        let serverPort = try Self.lookUpConverterPort(serviceName: serviceName)
+        let responseData = try machCall(requestData, serverPort: serverPort, timeout: callTimeout)
+
+        do {
+            return try Mozc_Commands_Output(serializedBytes: responseData)
+        } catch {
+            throw MozcError.protocolError("failed to parse Output: \(error)")
+        }
     }
 }
