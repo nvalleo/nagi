@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>ja</string>
+	<key>CFBundleDisplayName</key>
+	<string>Nagi</string>
+	<key>CFBundleExecutable</key>
+	<string>Nagi</string>
+	<key>CFBundleIdentifier</key>
+	<!-- Draft bundle ID from issue #1 — not finalized. -->
+	<string>com.nvleo.nagi</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Nagi</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<!-- No dock icon, no menu bar (other than the system Input Menu) —
+	     this is a background-only IMKit host, same as every other
+	     third-party macOS IME. -->
+	<key>LSBackgroundOnly</key>
+	<true/>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>InputMethodConnectionName</key>
+	<string>Nagi_1_Connection</string>
+	<key>InputMethodServerControllerClass</key>
+	<string>NagiInputController</string>
+	<key>TISIntendedLanguage</key>
+	<string>ja</string>
+	<key>tsInputMethodCharacterRepertoireKey</key>
+	<array>
+		<string>Hira</string>
+		<string>Latn</string>
+	</array>
+	<!-- M1 is a single romaji->hiragana mode, on purpose — no katakana /
+	     half-width / full-width-roman variants yet. Compare
+	     google/mozc's mac/Info.plist (five modes) once M2 lands real
+	     conversion and those modes start meaning something. -->
+	<key>ComponentInputModeDict</key>
+	<dict>
+		<key>tsInputModeListKey</key>
+		<dict>
+			<key>com.nvleo.nagi.Hiragana</key>
+			<dict>
+				<key>TISInputSourceID</key>
+				<string>com.nvleo.nagi.Hiragana</string>
+				<key>TISIntendedLanguage</key>
+				<string>ja</string>
+				<key>tsInputModeIsVisibleKey</key>
+				<true/>
+				<key>tsInputModePrimaryInScriptKey</key>
+				<true/>
+				<key>tsInputModeScriptKey</key>
+				<string>smJapanese</string>
+			</dict>
+		</dict>
+		<key>tsVisibleInputModeOrderedArrayKey</key>
+		<array>
+			<string>com.nvleo.nagi.Hiragana</string>
+		</array>
+	</dict>
+</dict>
+</plist>
