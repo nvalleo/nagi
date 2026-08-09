@@ -95,6 +95,18 @@ a downloaded macSKK release). Three silent requirements came out of it:
    after a full reboot**, not a log out/in — the commonly-cited advice —
    and not by restarting `imklaunchagent`/`TextInputMenuAgent` by hand.
 
+Unverified hypothesis, noted during M2b: this reboot requirement may only
+apply to *additions* (a new/changed `TISInputSourceID` becoming
+selectable). *Removal* looks different — uninstalling Google 日本語入力
+made it disappear from System Settings' Input Sources list immediately,
+no logout/reboot, on the same machine where addition-side reboot was
+confirmed required (item 3 above). Plausible explanation: the picker
+checks whether a listed source's backing `.app` still exists at render
+time, which doesn't need the same on-boot directory rescan that noticing
+a *new* bundle apparently does — but this is a guess, not verified
+against source or repeated testing. Flagging here rather than treating it
+as confirmed.
+
 Full write-up, including the long list of things that turned out **not**
 to matter (code-signing identity, hardened runtime, plist format, binary
 architecture, icon presence, …) is in [`app/README.md`](../app/README.md).
