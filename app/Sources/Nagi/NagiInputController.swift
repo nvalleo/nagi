@@ -114,7 +114,7 @@ final class NagiInputController: IMKInputController {
         }
 
         if output.hasCandidateWindow, !output.candidateWindow.candidate.isEmpty {
-            candidateWindow.show(output.candidateWindow, belowCaret: caretRect(client: client))
+            candidateWindow.show(output, belowCaret: caretRect(client: client))
         } else {
             candidateWindow.hide()
         }
