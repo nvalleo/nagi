@@ -198,6 +198,9 @@ struct CandidateListView: View {
                     .frame(width: Self.gridCellSize, height: Self.gridCellSize)
                     .background(candidate.id == state.focusedID ? Color.accentColor.opacity(0.25) : Color.clear)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(candidate.text)
+                    .accessibilityAddTraits(candidate.id == state.focusedID ? [.isSelected] : [])
             }
             if candidates.count < Self.gridColumnCount {
                 Spacer(minLength: 0)
@@ -232,5 +235,13 @@ struct CandidateListView: View {
         .padding(.vertical, 3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(candidate.id == state.focusedID ? Color.accentColor.opacity(0.25) : Color.clear)
+        // VoiceOver doesn't pick this list up via normal focus-follows —
+        // see CandidateWindowController.announceFocusChange for the
+        // actual announcement. These traits/labels are still worth
+        // setting for Rotor-based exploration and consistency with how
+        // any other selectable list should describe itself.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(candidate.id + 1). \(candidate.text)" + (candidate.hasSubCandidates ? "、さらに選択肢あり" : ""))
+        .accessibilityAddTraits(candidate.id == state.focusedID ? [.isSelected] : [])
     }
 }

@@ -53,6 +53,10 @@ final class CandidateWindowController {
     /// — see docs/architecture.md, "OS integration: InputMethodKit".
     func show(_ output: Mozc_Commands_Output, belowCaret caretRect: NSRect) {
         state.update(from: output)
+        announceFocusChange(
+            hasSubmenu: output.candidateWindow.hasFocusedIndex && output.candidateWindow.hasSubCandidateWindow,
+            isSubCandidateContext: false
+        )
         reposition(belowCaret: caretRect)
     }
 
@@ -64,7 +68,58 @@ final class CandidateWindowController {
     /// mozc itself isn't tracking it.
     func showSubCandidates(_ subCandidates: [Mozc_Commands_CandidateWindow.Candidate], focusedIndex: Int, belowCaret caretRect: NSRect) {
         state.updateSubCandidates(subCandidates, focusedIndex: focusedIndex)
+        announceFocusChange(hasSubmenu: false, isSubCandidateContext: true)
         reposition(belowCaret: caretRect)
+    }
+
+    private var lastAnnouncedCandidateID: Int?
+    private var lastAnnouncedWasSubCandidateContext = false
+
+    /// VoiceOver support. The panel deliberately never becomes key (see
+    /// `becomesKeyOnlyIfNeeded` above — typing must keep going to the
+    /// target app), which means VoiceOver's normal focus-follows model
+    /// never picks it up: nothing here is "focused" in the AX sense, so
+    /// a plain `.accessibilityAddTraits(.isSelected)` in
+    /// `CandidateListView` alone is silent. macOS's own system Japanese
+    /// input candidate window has the same constraint and solves it the
+    /// same way — an explicit `.announcementRequested` notification,
+    /// which VoiceOver speaks regardless of AX focus.
+    ///
+    /// Only fires when the focused candidate's identity (or list/
+    /// sub-list context) actually changed — critically, *not* on every
+    /// `show()` call, since mozc's own end-of-list stall (see
+    /// `CandidateListState.focusedID`'s doc comment) means several
+    /// consecutive keystrokes can report the same focused candidate; if
+    /// each one still announced, that stall would sound like VoiceOver
+    /// itself is stuck repeating, instead of accurately going silent
+    /// (correctly) while nothing changes.
+    private func announceFocusChange(hasSubmenu: Bool, isSubCandidateContext: Bool) {
+        guard let focusedID = state.focusedID,
+            let candidate = state.candidates.first(where: { $0.id == focusedID })
+        else {
+            lastAnnouncedCandidateID = nil
+            lastAnnouncedWasSubCandidateContext = false
+            return
+        }
+        let contextChanged = isSubCandidateContext != lastAnnouncedWasSubCandidateContext
+        guard contextChanged || candidate.id != lastAnnouncedCandidateID else { return }
+        lastAnnouncedCandidateID = candidate.id
+        lastAnnouncedWasSubCandidateContext = isSubCandidateContext
+
+        var announcement = candidate.text
+        if isSubCandidateContext {
+            announcement = "サブ候補: " + announcement
+        } else if hasSubmenu {
+            announcement += "、右矢印キーでさらに選択肢"
+        }
+        NSAccessibility.post(
+            element: panel,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: announcement,
+                .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+            ]
+        )
     }
 
     private func reposition(belowCaret caretRect: NSRect) {
@@ -102,5 +157,10 @@ final class CandidateWindowController {
 
     func hide() {
         panel.orderOut(nil)
+        // Without this, a coincidental id match (e.g. both this closing
+        // list and the next conversion's list happen to have a
+        // candidate id=0 first) could suppress that next announcement.
+        lastAnnouncedCandidateID = nil
+        lastAnnouncedWasSubCandidateContext = false
     }
 }
