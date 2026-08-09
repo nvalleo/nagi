@@ -22,17 +22,26 @@ IME code.
 
 Living in [`poc/`](../poc).
 
-## M1 — Empty IME with committing text (2 weeks)
+## M1 — Empty IME with committing text (2 weeks) — done
 
 Get the IMKit skeleton into System Settings and let it write text into
 TextEdit. No conversion yet — just prove we can hold the input mode.
 
-- Xcode app target, `Application is background only = YES`.
+- SwiftPM app target (no Xcode project — see [`app/README.md`](../app/README.md)),
+  `LSUIElement = YES`.
 - `IMKInputController` subclass.
 - Romaji → hiragana table, commit-on-Enter.
-- Install script that registers the IME with `~/Library/Input Methods/`.
+- Install script that registers the IME with `~/Library/Input Methods/` or
+  `/Library/Input Methods/`.
 
-**Exit criterion:** typing `nagi<Enter>` in TextEdit inserts `なぎ`.
+**Exit criterion:** typing `nagi<Enter>` in TextEdit inserts `なぎ`. **Confirmed
+on the dev machine.**
+
+Getting a bundle to actually register as a Text Input Source (as opposed to
+just building and running) turned out to be the real risk in this milestone,
+not the IMKit code itself — see
+[docs/architecture.md](architecture.md#getting-registered-as-a-text-input-source-learned-the-hard-way-in-m1)
+for the three silent requirements that took most of the milestone to find.
 
 ## M2 — Candidate window with Mozc backend (2–3 weeks)
 
@@ -80,7 +89,10 @@ The scope beyond M3 depends on how M0–M3 landed. Candidates:
 - Optional LLM-backed suggestions via a local endpoint (keeping the
   no-network-by-default promise).
 - Preferences pane (`mozc_tool`-style, but native).
-- Signed and notarised `.pkg` distribution, Homebrew cask.
+- Signed and notarised `.pkg` distribution, Homebrew cask. (Not required
+  just to *register* as a Text Input Source — M1 confirmed ad-hoc signing
+  works fine for that — but still needed for Gatekeeper-friendly
+  distribution to other people's machines.)
 
 ## Cross-platform (post-1.0)
 

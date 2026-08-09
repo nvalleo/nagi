@@ -1,0 +1,7 @@
+/* Localized display names for the Input Source picker. Without this
+   file, macOS falls back to showing the raw TISInputSourceID string
+   instead of a human-readable name — confirmed by comparing against
+   macSKK's own Contents/Resources/InfoPlist.strings, which follows
+   the same pattern (CFBundleName + one entry per TISInputSourceID). */
+"CFBundleName" = "Nagi";
+"com.nvleo.inputmethod.nagi.Hiragana" = "ひらがな";
