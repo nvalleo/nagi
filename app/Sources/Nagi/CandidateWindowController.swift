@@ -44,15 +44,24 @@ final class CandidateWindowController {
         panel.contentView = hostingView
     }
 
-    /// Shows (or repositions/updates) the panel with `candidateWindow`'s
-    /// contents. `caretRect` is screen coordinates, as returned by
+    /// Shows (or repositions/updates) the panel with `output`'s candidate
+    /// data (see `CandidateListState.update(from:)` for why this takes the
+    /// whole `Output`, not just `Output.candidateWindow`). `caretRect` is
+    /// screen coordinates, as returned by
     /// `IMKTextInput.attributes(forCharacterIndex:lineHeightRectangle:)`
     /// — see docs/architecture.md, "OS integration: InputMethodKit".
-    func show(_ candidateWindow: Mozc_Commands_CandidateWindow, belowCaret caretRect: NSRect) {
-        state.update(from: candidateWindow)
+    func show(_ output: Mozc_Commands_Output, belowCaret caretRect: NSRect) {
+        state.update(from: output)
 
         guard let hostingView = panel.contentView as? NSHostingView<CandidateListView> else { return }
-        let size = hostingView.fittingSize
+        // fittingSize resolves SwiftUI's *ideal* size, which for the
+        // scrollable candidate list is its full unclipped content height
+        // (see CandidateListView.maxPanelHeight) — clamp it here so the
+        // panel (and therefore the hosting view's actual layout bounds)
+        // is what makes the list's internal ScrollView clip/scroll at
+        // all, not just visually cap it.
+        let idealSize = hostingView.fittingSize
+        let size = NSSize(width: idealSize.width, height: min(idealSize.height, CandidateListView.maxPanelHeight))
         let origin = NSPoint(x: caretRect.minX, y: caretRect.minY - size.height)
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
 
