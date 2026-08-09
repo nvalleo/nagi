@@ -2,6 +2,11 @@
    file, macOS falls back to showing the raw TISInputSourceID string
    instead of a human-readable name — confirmed by comparing against
    macSKK's own Contents/Resources/InfoPlist.strings, which follows
-   the same pattern (CFBundleName + one entry per TISInputSourceID). */
+   the same pattern (CFBundleName + one entry per TISInputSourceID).
+
+   "ひらがな (Nagi)", not the plain "ひらがな" M1 shipped with: other
+   Japanese IMEs (Google 日本語入力, macSKK, Kotoeri) all register a mode
+   named exactly "ひらがな" too, so a bare "ひらがな" is indistinguishable
+   from theirs in the Input Sources list — see issue #6, item 1. */
 "CFBundleName" = "Nagi";
-"com.nvleo.inputmethod.nagi.Hiragana" = "ひらがな";
+"com.nvleo.inputmethod.nagi.Hiragana" = "ひらがな (Nagi)";

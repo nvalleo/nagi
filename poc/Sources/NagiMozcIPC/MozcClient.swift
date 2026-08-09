@@ -124,6 +124,38 @@ public actor MozcClient {
         return ConversionResult(preedit: preedit, candidates: candidates)
     }
 
+    // MARK: - Direct key events (M2: IMKit / candidate window)
+
+    /// Sends one raw key event through the session and returns the
+    /// server's `Output` unmodified.
+    ///
+    /// Deliberately no bespoke keymap logic on our side: mozc_server's own
+    /// session state machine (PRECOMPOSITION / COMPOSITION / CONVERSION)
+    /// already implements what Space / arrow keys / Enter / Escape do —
+    /// exactly like every other Mozc client (mac/mozc_imk_input_controller.mm
+    /// included). The caller only has to render whatever `Output` says.
+    public func sendKey(_ keyEvent: Mozc_Commands_KeyEvent, session: UInt64) async throws -> Mozc_Commands_Output {
+        var input = Mozc_Commands_Input()
+        input.type = .sendKey
+        input.id = session
+        input.key = keyEvent
+        return try await call(input)
+    }
+
+    /// Forces the current composition to commit (`SessionCommand.SUBMIT`),
+    /// equivalent to the user pressing Enter. Used when IMKit tears the
+    /// composition down from outside (focus loss, IME switch) rather than
+    /// from a key event we can just forward.
+    public func submit(session: UInt64) async throws -> Mozc_Commands_Output {
+        var input = Mozc_Commands_Input()
+        input.type = .sendCommand
+        input.id = session
+        var command = Mozc_Commands_SessionCommand()
+        command.type = .submit
+        input.command = command
+        return try await call(input)
+    }
+
     // MARK: - Transport
 
     private func call(_ input: Mozc_Commands_Input) async throws -> Mozc_Commands_Output {

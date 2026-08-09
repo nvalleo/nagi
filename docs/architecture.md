@@ -41,7 +41,9 @@ for the session. The IPC endpoint is **not** a Unix domain socket on macOS —
 see "Mozc IPC" below, confirmed against upstream source and verified
 end-to-end in [`poc/`](../poc) (M0). It's a Mach bootstrap service registered
 via launchd, under our own launchd label once we bundle our own
-`mozc_server` (M2); for now the PoC piggybacks on Google 日本語入力's
+`mozc_server` (M2b, tracked as
+[#9](https://github.com/nv-leo/nagi/issues/9)); for now both the PoC and
+the M2a app piggyback on Google 日本語入力's
 `com.google.inputmethod.Japanese.Converter.session` service.
 
 ## OS integration: InputMethodKit
