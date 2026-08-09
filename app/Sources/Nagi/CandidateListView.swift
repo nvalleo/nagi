@@ -15,28 +15,36 @@ struct CandidateListView: View {
     /// M3a (#13): was a step-change (`background(condition ? color :
     /// .clear)` with no animation) — the highlight jumped instantly
     /// between candidates instead of visibly tracking arrow-key
-    /// movement. Originally a sliding highlight via `matchedGeometryEffect`,
-    /// but that turned out to conflict with M3b's (#14) `ScrollViewReader.
-    /// scrollTo` once scrolling was involved — animating a matched-geometry
-    /// move and a scroll offset change in the same transaction made the
-    /// highlight visibly freeze once it had to cross a scroll. A plain
-    /// cross-fade doesn't have that per-row geometry coupling, so it
-    /// keeps working once the list scrolls.
+    /// movement. A `matchedGeometryEffect` slide was tried first but
+    /// conflicted with M3b's (#14) scrolling; a plain cross-fade doesn't
+    /// have that per-row geometry coupling.
     private static let highlightAnimation = Animation.spring(response: 0.28, dampingFraction: 0.82)
 
-    /// M3b (#14): `state.candidates` now backs onto `Output.
-    /// allCandidateWords` (see `CandidateListState.update(from:)`),
-    /// which for a homophone-heavy reading can easily run into the
-    /// dozens (76, for example, for "こうしょう") — rendered
-    /// unconstrained, the panel would run off the bottom of the screen.
-    /// Capping to roughly this many rows (a rough estimate from the row
-    /// font/padding below, not pixel-measured — precision doesn't
-    /// matter here since a partial row at the boundary is itself a
-    /// useful "more below" affordance) keeps the panel a sane height;
-    /// anything beyond it scrolls, and the scroll position tracks
-    /// `focusedID` below. Deliberately not sized off the screen's own
-    /// height (roadmap's "画面サイズに応じて") — out of scope for now,
-    /// see the file header.
+    /// M3b/M3d follow-up (#14, #16, #21): earlier revisions rendered
+    /// the *full* candidate list inside a `ScrollView` and called
+    /// `ScrollViewReader.scrollTo(focusedID)` on every focus change to
+    /// keep the highlight in view. That `scrollTo` turned out to be
+    /// unreliable specifically in this app's setup — a `ScrollView`
+    /// inside `NSHostingView`-hosted SwiftUI content floating in a
+    /// plain `NSPanel`, not a normal SwiftUI window scene. Confirmed via
+    /// file-based logging (Unified Logging/`NSLog` itself wasn't
+    /// reaching `log stream` for this IMKit process, for reasons never
+    /// pinned down) that `state.focusedID` advanced correctly and
+    /// `scrollTo` was *called* on every single keystroke, all the way
+    /// through a candidate list — yet the on-screen highlight still
+    /// visibly froze partway through. Four different fixes aimed at
+    /// *how* scrollTo was invoked (animated vs. not, `Grid` vs.
+    /// `LazyVGrid`, deferring a runloop turn, skipping redundant
+    /// `panel.setFrame` calls) all failed to change that.
+    //
+    // The fix here sidesteps the whole API rather than continuing to
+    // chase it: instead of rendering everything and asking SwiftUI to
+    // scroll to the focused one, `visibleRows` computes a bounded
+    // *window* of rows around `focusedID` itself and only that window
+    // is ever rendered. There's no scroll position for anything to fail
+    // to update — "keeping the focused candidate in view" is just
+    // "compute a slice that contains it", recomputed fresh on every
+    // `focusedID` change like any other SwiftUI state.
     private static let maxVisibleRows: CGFloat = 10
     private static let approximateRowHeight: CGFloat = 25
     private static let maxListHeight = maxVisibleRows * approximateRowHeight
@@ -44,58 +52,62 @@ struct CandidateListView: View {
     /// `.frame(maxHeight:)` below caps the *content* height, but adding
     /// it (or `body`'s own ideal height) doesn't cap what
     /// `NSHostingView.fittingSize` reports — that API resolves SwiftUI's
-    /// *ideal* size, which for a `ScrollView` is its full unclipped
-    /// content height, not the constrained one. `CandidateWindowController`
-    /// has to clamp the panel to this explicitly and let the *actual*,
-    /// smaller frame it then assigns force `ScrollView` to lay out (and
-    /// therefore clip/scroll) within real bounds. `outerPadding` accounts
-    /// for the `.padding(4)` around the list itself (4pt top + 4pt bottom).
+    /// *ideal* size. `CandidateWindowController` has to clamp the panel
+    /// to this explicitly. `outerPadding` accounts for the `.padding(4)`
+    /// around the list itself (4pt top + 4pt bottom).
     static let outerPadding: CGFloat = 8
     static let maxPanelHeight = maxListHeight + outerPadding
 
     /// M3d (#16): emoji/kaomoji candidates (`Candidate.isPictograph`,
     /// see `CandidateListState`) render as fixed-size grid cells instead
     /// of full-width rows — a `9`-wide grid of 26pt glyphs reads far
-    /// better than a scroll of one-per-line rows. Fixed-size `GridItem`s,
-    /// not `.flexible()`: a flexible column wants to fill "available"
-    /// width, which under `NSHostingView.fittingSize`'s ideal-size
-    /// resolution (unconstrained proposal — the same quirk documented on
-    /// `maxPanelHeight` above) resolves to something absurdly wide
-    /// instead of the panel's actual, content-driven width.
+    /// better than a scroll of one-per-line rows.
     private static let gridColumnCount = 9
     private static let gridCellSize: CGFloat = 26
-    private static let gridColumns = Array(
-        repeating: GridItem(.fixed(gridCellSize), spacing: 4),
-        count: gridColumnCount
-    )
+    private static let gridRowHeight: CGFloat = gridCellSize + 4 // cell + vertical padding
+
+    /// One visual row of the list: either a single plain-text candidate,
+    /// or a full row of up to `gridColumnCount` pictograph candidates.
+    /// `groupedCandidates`/`allRows` build these from `state.candidates`
+    /// (see their docs); `visibleRows` windows them for `body`.
+    private enum Row: Identifiable {
+        case text(CandidateListState.Candidate)
+        case grid([CandidateListState.Candidate])
+
+        var id: Int {
+            switch self {
+            case .text(let candidate): return candidate.id
+            case .grid(let candidates): return candidates.first?.id ?? -1
+            }
+        }
+
+        var height: CGFloat {
+            switch self {
+            case .text: return CandidateListView.approximateRowHeight
+            case .grid: return CandidateListView.gridRowHeight
+            }
+        }
+
+        func contains(candidateID: Int) -> Bool {
+            switch self {
+            case .text(let candidate): return candidate.id == candidateID
+            case .grid(let candidates): return candidates.contains { $0.id == candidateID }
+            }
+        }
+    }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(groupedCandidates.enumerated()), id: \.offset) { _, group in
-                        if group.first?.isPictograph == true {
-                            pictographGrid(for: group)
-                        } else {
-                            ForEach(group) { candidate in
-                                row(for: candidate)
-                            }
-                        }
-                    }
-                }
-                .padding(4)
-            }
-            .frame(maxHeight: Self.maxListHeight)
-            // Single-parameter onChange, not the two-parameter form: the
-            // target here is macOS 13 (app/Package.swift), and the
-            // two-parameter overload needs macOS 14.
-            .onChange(of: state.focusedID) { focusedID in
-                guard let focusedID else { return }
-                withAnimation(Self.highlightAnimation) {
-                    proxy.scrollTo(focusedID, anchor: .center)
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(visibleRows) { row in
+                switch row {
+                case .text(let candidate):
+                    self.row(for: candidate)
+                case .grid(let candidates):
+                    pictographRow(candidates)
                 }
             }
         }
+        .padding(4)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .fixedSize(horizontal: true, vertical: false)
@@ -106,10 +118,7 @@ struct CandidateListView: View {
     /// `isPictograph` value, preserving order — e.g. for "かお":
     /// [顔, かお, カオ, 買お] (text) then [☠️, ☹️, ☺️, …] (pictograph).
     /// Candidates aren't pre-grouped by mozc itself (see
-    /// `CandidateListState.Candidate.isPictograph`), so this has to be
-    /// recomputed whenever the candidate list changes; it's cheap enough
-    /// (at most a few dozen candidates per conversion) not to bother
-    /// caching.
+    /// `CandidateListState.Candidate.isPictograph`).
     private var groupedCandidates: [[CandidateListState.Candidate]] {
         state.candidates.reduce(into: [[CandidateListState.Candidate]]()) { groups, candidate in
             if groups.last?.first?.isPictograph == candidate.isPictograph {
@@ -120,20 +129,82 @@ struct CandidateListView: View {
         }
     }
 
+    /// Flattens `groupedCandidates` into `Row`s: one `Row.text` per
+    /// plain candidate, one `Row.grid` per `gridColumnCount`-sized chunk
+    /// of a pictograph run.
+    private var allRows: [Row] {
+        groupedCandidates.flatMap { group -> [Row] in
+            guard group.first?.isPictograph == true else {
+                return group.map { .text($0) }
+            }
+            return stride(from: 0, to: group.count, by: Self.gridColumnCount).map { start in
+                .grid(Array(group[start..<min(start + Self.gridColumnCount, group.count)]))
+            }
+        }
+    }
+
+    /// The window of `allRows` actually rendered: starts centered on
+    /// whichever row contains `state.focusedID` and grows outward
+    /// (alternating forward/backward) until it would exceed
+    /// `maxListHeight`. Always includes the focused row when there is
+    /// one. Falls back to the first `maxListHeight`'s worth of rows if
+    /// nothing is focused yet (e.g. a suggestion list before the
+    /// candidate window has been opened with Down/Tab/Space).
+    private var visibleRows: [Row] {
+        let rows = allRows
+        guard let focusedID = state.focusedID,
+            let focusedRowIndex = rows.firstIndex(where: { $0.contains(candidateID: focusedID) })
+        else {
+            var height: CGFloat = 0
+            var end = 0
+            while end < rows.count, height + rows[end].height <= Self.maxListHeight {
+                height += rows[end].height
+                end += 1
+            }
+            return Array(rows[0..<max(end, min(1, rows.count))])
+        }
+
+        var lowIndex = focusedRowIndex
+        var highIndex = focusedRowIndex
+        var height = rows[focusedRowIndex].height
+        var growForward = true
+        while height < Self.maxListHeight {
+            if growForward, highIndex + 1 < rows.count {
+                highIndex += 1
+                height += rows[highIndex].height
+            } else if !growForward, lowIndex > 0 {
+                lowIndex -= 1
+                height += rows[lowIndex].height
+            } else if highIndex + 1 < rows.count {
+                highIndex += 1
+                height += rows[highIndex].height
+            } else if lowIndex > 0 {
+                lowIndex -= 1
+                height += rows[lowIndex].height
+            } else {
+                break
+            }
+            growForward.toggle()
+        }
+        return Array(rows[lowIndex...highIndex])
+    }
+
     @ViewBuilder
-    private func pictographGrid(for candidates: [CandidateListState.Candidate]) -> some View {
-        LazyVGrid(columns: Self.gridColumns, spacing: 4) {
+    private func pictographRow(_ candidates: [CandidateListState.Candidate]) -> some View {
+        HStack(spacing: 4) {
             ForEach(candidates) { candidate in
                 Text(candidate.text)
                     .font(.system(size: 20))
                     .frame(width: Self.gridCellSize, height: Self.gridCellSize)
                     .background(candidate.id == state.focusedID ? Color.accentColor.opacity(0.25) : Color.clear)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .id(candidate.id)
+            }
+            if candidates.count < Self.gridColumnCount {
+                Spacer(minLength: 0)
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder
@@ -150,6 +221,5 @@ struct CandidateListView: View {
         .padding(.vertical, 3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(candidate.id == state.focusedID ? Color.accentColor.opacity(0.25) : Color.clear)
-        .id(candidate.id)
     }
 }

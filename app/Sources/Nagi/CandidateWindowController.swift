@@ -21,6 +21,7 @@ final class CandidateWindowController {
 
     private let panel: NSPanel
     private let state = CandidateListState()
+    private var lastFrame: NSRect?
 
     init() {
         panel = NSPanel(
@@ -54,16 +55,29 @@ final class CandidateWindowController {
         state.update(from: output)
 
         guard let hostingView = panel.contentView as? NSHostingView<CandidateListView> else { return }
-        // fittingSize resolves SwiftUI's *ideal* size, which for the
-        // scrollable candidate list is its full unclipped content height
-        // (see CandidateListView.maxPanelHeight) — clamp it here so the
-        // panel (and therefore the hosting view's actual layout bounds)
-        // is what makes the list's internal ScrollView clip/scroll at
-        // all, not just visually cap it.
+        // fittingSize resolves SwiftUI's ideal size for whatever
+        // CandidateListView.visibleRows currently windows into view —
+        // clamp it here as a backstop against CandidateListView's own
+        // (estimated, not pixel-measured) height budget slightly
+        // overshooting maxPanelHeight.
         let idealSize = hostingView.fittingSize
         let size = NSSize(width: idealSize.width, height: min(idealSize.height, CandidateListView.maxPanelHeight))
         let origin = NSPoint(x: caretRect.minX, y: caretRect.minY - size.height)
-        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+        let frame = NSRect(origin: origin, size: size)
+
+        // Only actually resize the panel when the frame changed — e.g. a
+        // new conversion, or crossing into/out of the M3d (#16)
+        // pictograph grid, changes the content's natural size. Cycling
+        // through candidates within one conversion (Space/Down/Tab) is
+        // the common case and produces the *same* frame most calls;
+        // skipping the redundant `setFrame` avoids forcing AppKit to
+        // redo the hosting view's layout on every keystroke for no
+        // visible benefit (tried while chasing #21 — didn't turn out to
+        // be the cause, but kept as a harmless optimization).
+        if frame != lastFrame {
+            panel.setFrame(frame, display: true)
+            lastFrame = frame
+        }
 
         // orderFrontRegardless, not orderFront/makeKeyAndOrderFront:
         // this must not steal key focus from the target app's text

@@ -29,6 +29,36 @@ final class NagiInputController: IMKInputController {
 
     private let candidateWindow = CandidateWindowController()
 
+    /// The `CandidateWindow.focusedIndex` from the most recently applied
+    /// `Output`, used by `handle(_:client:)`'s auto-advance loop to spot
+    /// mozc's end-of-list stall — see there. `nil` whenever no candidate
+    /// is focused (matches `CandidateListState.focusedID`'s own
+    /// `hasFocusedIndex` gating), so a fresh composition after a commit
+    /// can never be mistaken for a stall still in progress.
+    private var lastFocusedIndex: UInt32?
+
+    /// How many *real* (not auto-advanced) keystrokes in a row have
+    /// reported the same `focusedIndex` as the one before. The first
+    /// keystroke that lands on the last real candidate is never a
+    /// repeat (`lastFocusedIndex` was different), so it's always shown
+    /// as-is — the user can see and select it normally. Auto-advance
+    /// used to fire on the very next keystroke, the first *repeat*,
+    /// which meant one further press silently jumped clear past the
+    /// last candidate to the first with no chance to notice or act on
+    /// it in between. Requiring `repeatGraceThreshold` repeats first
+    /// gives that one candidate a real keystroke's worth of standing
+    /// still before anything starts skipping.
+    private var repeatedFocusStreak = 0
+    private static let repeatGraceThreshold = 2
+
+    /// Safety net for the auto-advance loop below, not an expected trip
+    /// count — the stall itself was verified (against the raw protocol)
+    /// to last exactly `CandidateWindow.pageSize` (9 by default) more
+    /// presses of the same key. Generous margin in case that assumption
+    /// doesn't hold for some case not yet seen; without a cap, a case
+    /// where it never resolves would hang key handling in a loop.
+    private static let maxAutoAdvance = 20
+
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
         guard sessionID == nil else { return }
@@ -61,13 +91,54 @@ final class NagiInputController: IMKInputController {
         guard let sessionID else { return false }
         guard let keyEvent = MozcKeyEventMapping.keyEvent(for: event) else { return false }
 
-        let output: Mozc_Commands_Output
+        var output: Mozc_Commands_Output
         do {
             output = try MozcBridge.sendKey(keyEvent, session: sessionID)
         } catch {
             NSLog("Nagi: sendKey failed: \(error)")
             return false
         }
+
+        // mozc_server holds focusedIndex on the last real candidate for
+        // CandidateWindow.pageSize (9 by default) more presses of the
+        // same navigation key before wrapping to the first candidate —
+        // verified against the raw protocol, independent of anything in
+        // this app's rendering (see the CandidateListState.focusedID
+        // doc comment). Left alone, that reads as up to 9 keystrokes of
+        // dead input, which is exactly the kind of legacy-IME wart nagi
+        // is meant to not have (README's positioning vs Google
+        // 日本語入力). Silently replaying the same keyEvent while
+        // focusedIndex doesn't move collapses that dead zone into one
+        // immediate transition. This is a deliberate, narrow exception
+        // to this file's "no local keymap" rule above — it doesn't
+        // change *what* any key does, only how many times mozc's own
+        // state machine has to be asked before its answer changes.
+        //
+        // repeatedFocusStreak gates *when* that kicks in — see its own
+        // doc comment for why the very first repeat must not trigger it.
+        let initialFocusedIndex = output.candidateWindow.hasFocusedIndex ? output.candidateWindow.focusedIndex : nil
+        if output.hasCandidateWindow, initialFocusedIndex != nil, initialFocusedIndex == lastFocusedIndex {
+            repeatedFocusStreak += 1
+        } else {
+            repeatedFocusStreak = 0
+        }
+
+        var autoAdvanceCount = 0
+        while repeatedFocusStreak >= Self.repeatGraceThreshold,
+            output.hasCandidateWindow,
+            output.candidateWindow.hasFocusedIndex,
+            output.candidateWindow.focusedIndex == lastFocusedIndex,
+            autoAdvanceCount < Self.maxAutoAdvance
+        {
+            do {
+                output = try MozcBridge.sendKey(keyEvent, session: sessionID)
+            } catch {
+                NSLog("Nagi: sendKey (auto-advance) failed: \(error)")
+                break
+            }
+            autoAdvanceCount += 1
+        }
+        lastFocusedIndex = output.candidateWindow.hasFocusedIndex ? output.candidateWindow.focusedIndex : nil
 
         apply(output, client: client)
         return output.consumed
@@ -91,6 +162,13 @@ final class NagiInputController: IMKInputController {
         } catch {
             NSLog("Nagi: submit failed: \(error)")
         }
+        // Commit always ends candidate selection; without this, a stale
+        // focusedIndex from before the commit could coincidentally match
+        // the next composition's first focusedIndex and be mistaken by
+        // handle(_:client:)'s auto-advance loop for a stall already in
+        // progress.
+        lastFocusedIndex = nil
+        repeatedFocusStreak = 0
     }
 
     private func apply(_ output: Mozc_Commands_Output, client: IMKTextInput) {
