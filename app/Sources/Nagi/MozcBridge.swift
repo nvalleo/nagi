@@ -21,11 +21,20 @@ import NagiMozcProto
 
 enum MozcBridge {
 
+    /// M2b: Nagi bundles its own mozc_server (rebranded "NagiConverter",
+    /// see scripts/build-mozc-server.sh and issue #9) rather than
+    /// piggybacking on another installed Mozc-based IME the way the M0
+    /// PoC and M2a did. Its launchd Mach service name is rebranded to
+    /// match — see scripts/mozc-patches/nagi-branding.patch's comment on
+    /// why this has to be kept in sync with `kProjectPrefix` in mozc's
+    /// own base/mac/mac_util.mm, not just its Info.plist bundle ID.
+    static let converterServiceName = "com.nvleo.inputmethod.nagi.Converter.session"
+
     /// `MozcClient.init` is declared `throws` for API-shape reasons but
     /// never actually fails today (see its doc comment) — `try!`
     /// documents that rather than threading an unreachable error path
     /// through every call site.
-    static let client: MozcClient = try! MozcClient()
+    static let client: MozcClient = try! MozcClient(serviceName: converterServiceName)
 
     static func createSession() throws -> UInt64 {
         try runSync { try await client.createSession() }

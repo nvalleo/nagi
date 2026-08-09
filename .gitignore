@@ -20,6 +20,10 @@ Package.resolved
 poc/Sources/NagiMozcProto/Generated/
 poc/.mozc-proto/
 
+# M2b: full google/mozc checkout used to build our own mozc_server
+# (Bazel + third_party_cache can grow to several GB) — see issue #9.
+.mozc-build/
+
 # Editors
 .vscode/
 .idea/

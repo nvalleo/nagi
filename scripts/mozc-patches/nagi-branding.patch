@@ -1,0 +1,55 @@
+diff --git a/src/base/mac/mac_util.mm b/src/base/mac/mac_util.mm
+index 6ca6fc4..de99a29 100644
+--- a/src/base/mac/mac_util.mm
++++ b/src/base/mac/mac_util.mm
+@@ -63,7 +63,14 @@ const unsigned char kPrelauncherPath[] =
+ #ifdef GOOGLE_JAPANESE_INPUT_BUILD
+ const char kProjectPrefix[] = "com.google.inputmethod.Japanese.";
+ #elif defined(MOZC_BUILD)
+-const char kProjectPrefix[] = "org.mozc.inputmethod.Japanese.";
++// nagi (M2b): this literal, not config.bzl's MACOS_BUNDLE_ID_PREFIX, is
++// what ipc/mach_ipc.cc's GetMachPortName() actually uses to compute the
++// launchd Mach service name at runtime (MacUtil::GetLabelForSuffix ->
++// kProjectPrefix + "Converter.session"). config.bzl only reaches
++// Info.plist bundle IDs, not this constant — the two are independent
++// despite looking related. Must match the LaunchAgent plist's
++// MachServices key and MozcClient's serviceName in nagi's app/ exactly.
++const char kProjectPrefix[] = "com.nvleo.inputmethod.nagi.";
+ #else  // GOOGLE_JAPANESE_INPUT_BUILD, MOZC_BUILD
+ #error Unknown branding
+ #endif  // GOOGLE_JAPANESE_INPUT_BUILD, MOZC_BUILD
+diff --git a/src/config.bzl b/src/config.bzl
+index 3158901..2795273 100644
+--- a/src/config.bzl
++++ b/src/config.bzl
+@@ -33,7 +33,7 @@
+ # The following command reverts it.
+ # % git update-index --no-assume-unchanged config.bzl
+ 
+-BRANDING = "Mozc"
++BRANDING = "Nagi"
+ 
+ BAZEL_TOOLS_PREFIX = "@bazel_tools"
+ 
+@@ -48,7 +48,7 @@ IBUS_MOZC_PATH = "/usr/lib/ibus-mozc/ibus-engine-mozc"
+ EMACS_MOZC_CLIENT_DIR = "/usr/share/emacs/site-lisp/emacs-mozc"
+ EMACS_MOZC_HELPER_DIR = "/usr/bin"
+ 
+-MACOS_BUNDLE_ID_PREFIX = "org.mozc.inputmethod.Japanese"
++MACOS_BUNDLE_ID_PREFIX = "com.nvleo.inputmethod.nagi"
+ MACOS_MIN_OS_VER = "12.0"
+ 
+ # identity for codesign. The value passed to the --sign option of the codesign command.
+diff --git a/src/server/Info.plist b/src/server/Info.plist
+index 8174cbe..204ee01 100644
+--- a/src/server/Info.plist
++++ b/src/server/Info.plist
+@@ -11,7 +11,7 @@
+ 	<key>CFBundleIconFile</key>
+ 	<string>product_icon.icns</string>
+ 	<key>CFBundleIdentifier</key>
+-	<string>${DOMAIN_PREFIX}.inputmethod.Japanese.Converter</string>
++	<string>com.nvleo.inputmethod.nagi.Converter</string>
+ 	<key>CFBundleInfoDictionaryVersion</key>
+ 	<string>6.0</string>
+ 	<key>CFBundleName</key>
