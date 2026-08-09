@@ -60,6 +60,36 @@ Two IMKit specifics matter for the design:
    documented way to place the candidate window under the caret across
    arbitrary apps.
 
+### Getting registered as a Text Input Source (learned the hard way in M1)
+
+A correctly-built, correctly-signed, non-crashing IMKit bundle can still be
+completely invisible to System Settings — with zero errors anywhere. M1
+spent most of its time on this, bisecting against every known-working IMKit
+bundle available on the dev machine (Apple's own bundled
+`/System/Library/Input Methods/AinuIM.app`, an installed Google 日本語入力,
+a downloaded macSKK release). Three silent requirements came out of it:
+
+1. **Must be a `release` build.** SwiftPM `debug` builds carry an
+   auto-generated `com.apple.security.get-task-allow` entitlement, and a
+   binary with that entitlement is never added to the Text Input Source
+   registry — the process runs fine and even completes its XPC handshake
+   with `imklaunchagent`, it just never becomes selectable.
+2. **`CFBundleIdentifier` (and every `TISInputSourceID` under it) must
+   contain the literal substring `.inputmethod.`.** Every working bundle we
+   found used this token, and the literal string is embedded in
+   `imklaunchagent`/HIToolbox's string table next to
+   `ComponentInputModeDict`/`TISInputSourceID`. Bundle IDs without it are
+   silently dropped regardless of anything else being correct — this is why
+   nagi's bundle ID is `com.nvleo.inputmethod.nagi`, not the simpler
+   `com.nvleo.nagi` floated in issue #1.
+3. **Changes to the registry key (bundle ID, essentially) only take effect
+   after a full reboot**, not a log out/in — the commonly-cited advice —
+   and not by restarting `imklaunchagent`/`TextInputMenuAgent` by hand.
+
+Full write-up, including the long list of things that turned out **not**
+to matter (code-signing identity, hardened runtime, plist format, binary
+architecture, icon presence, …) is in [`app/README.md`](../app/README.md).
+
 ## The candidate window
 
 A borderless `NSPanel` (`.nonactivatingPanel`, floating level, non-key by

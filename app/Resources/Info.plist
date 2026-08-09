@@ -9,8 +9,14 @@
 	<key>CFBundleExecutable</key>
 	<string>Nagi</string>
 	<key>CFBundleIdentifier</key>
-	<!-- Draft bundle ID from issue #1 — not finalized. -->
-	<string>com.nvleo.nagi</string>
+	<!-- Draft bundle ID from issue #1 — not finalized. Must contain the
+	     literal substring ".inputmethod." — confirmed by bisecting
+	     against known-working IMKit bundles (every one of them,
+	     Apple's own and third-party, uses this token) and finding the
+	     literal string embedded in imklaunchagent/HIToolbox's string
+	     table. Bundle IDs without it are silently never added to the
+	     Text Input Source registry, no matter what else is correct. -->
+	<string>com.nvleo.inputmethod.nagi</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -19,21 +25,32 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>0.1.0</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>MacOSX</string>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
-	<!-- No dock icon, no menu bar (other than the system Input Menu) —
-	     this is a background-only IMKit host, same as every other
-	     third-party macOS IME. -->
-	<key>LSBackgroundOnly</key>
-	<true/>
+	<!-- No LSBackgroundOnly — Apple's own bundled IMKit hosts (e.g.
+	     /System/Library/Input Methods/AinuIM.app) declare only
+	     LSUIElement, not both. -->
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 nv-leo</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSSupportsSuddenTermination</key>
+	<true/>
 	<key>InputMethodConnectionName</key>
 	<string>Nagi_1_Connection</string>
+	<!-- ControllerClass only — neither AinuIM nor macSKK (both confirmed
+	     working) declare DataSourceClass/DelegateClass, so we dropped
+	     them to match the known-good pattern. -->
 	<key>InputMethodServerControllerClass</key>
 	<string>NagiInputController</string>
 	<key>TISIntendedLanguage</key>
@@ -43,31 +60,41 @@
 		<string>Hira</string>
 		<string>Latn</string>
 	</array>
+	<key>tsInputMethodIconFileKey</key>
+	<string>nagi.tiff</string>
 	<!-- M1 is a single romaji->hiragana mode, on purpose — no katakana /
 	     half-width / full-width-roman variants yet. Compare
 	     google/mozc's mac/Info.plist (five modes) once M2 lands real
-	     conversion and those modes start meaning something. -->
+	     conversion and those modes start meaning something.
+	     tsInputModePrimaryInScriptKey=false, mirroring AinuIM, so this
+	     doesn't claim to be *the* primary handler for smJapanese
+	     (Kotoeri/Google already do) while still being independently
+	     selectable. -->
 	<key>ComponentInputModeDict</key>
 	<dict>
 		<key>tsInputModeListKey</key>
 		<dict>
-			<key>com.nvleo.nagi.Hiragana</key>
+			<key>com.nvleo.inputmethod.nagi.Hiragana</key>
 			<dict>
 				<key>TISInputSourceID</key>
-				<string>com.nvleo.nagi.Hiragana</string>
+				<string>com.nvleo.inputmethod.nagi.Hiragana</string>
 				<key>TISIntendedLanguage</key>
 				<string>ja</string>
+				<key>tsInputModeDefaultStateKey</key>
+				<true/>
 				<key>tsInputModeIsVisibleKey</key>
 				<true/>
+				<key>tsInputModeMenuIconFileKey</key>
+				<string>nagi.tiff</string>
 				<key>tsInputModePrimaryInScriptKey</key>
-				<true/>
+				<false/>
 				<key>tsInputModeScriptKey</key>
 				<string>smJapanese</string>
 			</dict>
 		</dict>
 		<key>tsVisibleInputModeOrderedArrayKey</key>
 		<array>
-			<string>com.nvleo.nagi.Hiragana</string>
+			<string>com.nvleo.inputmethod.nagi.Hiragana</string>
 		</array>
 	</dict>
 </dict>
