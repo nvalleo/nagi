@@ -46,6 +46,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_DIR="$REPO_ROOT/app"
 
+# M2: Nagi depends on poc/'s NagiMozcIPC (a local SwiftPM package
+# dependency, see app/Package.swift) for real Mozc conversion. Its
+# NagiMozcProto target's sources are generated, not checked in (see
+# .gitignore) — fail with a clear message instead of a confusing SwiftPM
+# "no such file" error deep in the build.
+if [ ! -d "$REPO_ROOT/poc/Sources/NagiMozcProto/Generated" ]; then
+  echo "error: poc/Sources/NagiMozcProto/Generated is missing." >&2
+  echo "  Run ./scripts/fetch-mozc-proto.sh first (see poc/README.md)." >&2
+  exit 1
+fi
+
 CONFIGURATION="${1:-release}"
 case "$CONFIGURATION" in
   debug)

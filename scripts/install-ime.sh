@@ -46,12 +46,32 @@ done
 SRC="$REPO_ROOT/.build-app/Nagi.app"
 if [ "$SYSTEM_WIDE" = true ]; then
   DEST_DIR="/Library/Input Methods"
+  OTHER_DIR="$HOME/Library/Input Methods"
   SUDO="sudo"
 else
   DEST_DIR="$HOME/Library/Input Methods"
+  OTHER_DIR="/Library/Input Methods"
   SUDO=""
 fi
 DEST="$DEST_DIR/Nagi.app"
+
+# Installing to both locations at once is the one confirmed way to get a
+# pile of duplicate "ひらがな" entries in Input Sources: macOS registers
+# each physical Nagi.app path as its own entry under the same
+# TISInputSourceID, and — per the reboot note below — nothing prunes the
+# stale one until a full reboot. Warn rather than silently doing it again.
+if [ -d "$OTHER_DIR/Nagi.app" ]; then
+  echo "warning: Nagi.app is also installed at '$OTHER_DIR/Nagi.app'." >&2
+  echo "  Installing to both locations registers duplicate 'ひらがな'" >&2
+  echo "  Input Source entries (confirmed after M2). Remove the other" >&2
+  echo "  one unless you specifically want both:" >&2
+  if [ "$SYSTEM_WIDE" = true ]; then
+    echo "    rm -rf \"$OTHER_DIR/Nagi.app\"" >&2
+  else
+    echo "    sudo rm -rf \"$OTHER_DIR/Nagi.app\"" >&2
+  fi
+  echo >&2
+fi
 
 $SUDO mkdir -p "$DEST_DIR"
 
