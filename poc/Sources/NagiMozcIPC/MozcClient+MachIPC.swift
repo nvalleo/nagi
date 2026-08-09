@@ -80,7 +80,14 @@ extension MozcClient {
         guard allocKr == KERN_SUCCESS else {
             throw MozcError.protocolError("mach_port_allocate failed: \(allocKr)")
         }
-        defer { mach_port_deallocate(mach_task_self_, clientPort) }
+        // Note: destroy, not deallocate — `clientPort` is a RECEIVE right we
+        // allocated above, and `mach_port_deallocate` only drops a user ref
+        // on a send/send-once right. Calling it on a receive right is what
+        // mozc's own client avoids (mach_ipc.cc uses `mach_port_destroy` at
+        // every one of its cleanup sites); doing it here instead tripped
+        // the kernel's hardened port guard on every key event and surfaced
+        // as EXC_GUARD (kGUARD_EXC_INVALID_RIGHT, flavor=0x100) — see #8.
+        defer { mach_port_destroy(mach_task_self_, clientPort) }
 
         // The OOL payload buffer must stay alive across the mach_msg send
         // call. We keep `deallocate = false` + `copy = VIRTUAL_COPY`
