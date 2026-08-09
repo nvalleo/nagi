@@ -1,10 +1,11 @@
 // CandidateListView — minimal SwiftUI candidate list.
 //
 // M2 scope only: a plain vertical list, focused candidate highlighted.
-// No grid mode, no preview pane — that's M3c/M3d (see docs/roadmap.md,
-// issues #15/#16). Visual design here is deliberately basic (system
-// font, a material background, a highlight color) rather than invested
-// in, since M3 revisits this file's contents wholesale.
+// No preview pane — that's M3c, and out of scope entirely (#15: mozc's
+// OSS build has no usage-dictionary data to show). Visual design here
+// is deliberately basic (system font, a material background, a
+// highlight color) rather than invested in, since M3 revisits this
+// file's contents wholesale.
 
 import SwiftUI
 
@@ -52,12 +53,34 @@ struct CandidateListView: View {
     static let outerPadding: CGFloat = 8
     static let maxPanelHeight = maxListHeight + outerPadding
 
+    /// M3d (#16): emoji/kaomoji candidates (`Candidate.isPictograph`,
+    /// see `CandidateListState`) render as fixed-size grid cells instead
+    /// of full-width rows — a `9`-wide grid of 26pt glyphs reads far
+    /// better than a scroll of one-per-line rows. Fixed-size `GridItem`s,
+    /// not `.flexible()`: a flexible column wants to fill "available"
+    /// width, which under `NSHostingView.fittingSize`'s ideal-size
+    /// resolution (unconstrained proposal — the same quirk documented on
+    /// `maxPanelHeight` above) resolves to something absurdly wide
+    /// instead of the panel's actual, content-driven width.
+    private static let gridColumnCount = 9
+    private static let gridCellSize: CGFloat = 26
+    private static let gridColumns = Array(
+        repeating: GridItem(.fixed(gridCellSize), spacing: 4),
+        count: gridColumnCount
+    )
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(state.candidates) { candidate in
-                        row(for: candidate)
+                    ForEach(Array(groupedCandidates.enumerated()), id: \.offset) { _, group in
+                        if group.first?.isPictograph == true {
+                            pictographGrid(for: group)
+                        } else {
+                            ForEach(group) { candidate in
+                                row(for: candidate)
+                            }
+                        }
                     }
                 }
                 .padding(4)
@@ -77,6 +100,40 @@ struct CandidateListView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .fixedSize(horizontal: true, vertical: false)
         .animation(Self.highlightAnimation, value: state.focusedID)
+    }
+
+    /// Splits `state.candidates` into consecutive runs sharing the same
+    /// `isPictograph` value, preserving order — e.g. for "かお":
+    /// [顔, かお, カオ, 買お] (text) then [☠️, ☹️, ☺️, …] (pictograph).
+    /// Candidates aren't pre-grouped by mozc itself (see
+    /// `CandidateListState.Candidate.isPictograph`), so this has to be
+    /// recomputed whenever the candidate list changes; it's cheap enough
+    /// (at most a few dozen candidates per conversion) not to bother
+    /// caching.
+    private var groupedCandidates: [[CandidateListState.Candidate]] {
+        state.candidates.reduce(into: [[CandidateListState.Candidate]]()) { groups, candidate in
+            if groups.last?.first?.isPictograph == candidate.isPictograph {
+                groups[groups.count - 1].append(candidate)
+            } else {
+                groups.append([candidate])
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pictographGrid(for candidates: [CandidateListState.Candidate]) -> some View {
+        LazyVGrid(columns: Self.gridColumns, spacing: 4) {
+            ForEach(candidates) { candidate in
+                Text(candidate.text)
+                    .font(.system(size: 20))
+                    .frame(width: Self.gridCellSize, height: Self.gridCellSize)
+                    .background(candidate.id == state.focusedID ? Color.accentColor.opacity(0.25) : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .id(candidate.id)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder

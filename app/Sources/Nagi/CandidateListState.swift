@@ -13,6 +13,18 @@ final class CandidateListState: ObservableObject {
     struct Candidate: Identifiable {
         let id: Int
         let text: String
+        /// M3d (#16): emoji/kaomoji candidates share the same category
+        /// (`CandidateWindow.category == .conversion`) and direction
+        /// (`.vertical`) as ordinary text candidates — mozc doesn't flag
+        /// them separately at that level, and they're interleaved in the
+        /// same candidate list, not returned as their own group. The one
+        /// reliable signal, confirmed on-device, is
+        /// `Candidate.annotation.description_p` starting with "絵文字"
+        /// (emoji) or "顔文字" (kaomoji) — e.g. "絵文字 三日月", "顔文字
+        /// にこにこ わーい". `CandidateListView` uses this to switch
+        /// consecutive runs of these into a grid instead of the plain
+        /// list.
+        let isPictograph: Bool
     }
 
     @Published private(set) var candidates: [Candidate] = []
@@ -33,8 +45,16 @@ final class CandidateListState: ObservableObject {
     /// populate `allCandidateWords`.
     func update(from output: Mozc_Commands_Output) {
         candidates = output.allCandidateWords.candidates.isEmpty
-            ? output.candidateWindow.candidate.map { Candidate(id: Int($0.index), text: $0.value) }
-            : output.allCandidateWords.candidates.map { Candidate(id: Int($0.index), text: $0.value) }
+            ? output.candidateWindow.candidate.map {
+                Candidate(id: Int($0.index), text: $0.value, isPictograph: Self.isPictograph($0.annotation.description_p))
+            }
+            : output.allCandidateWords.candidates.map {
+                Candidate(id: Int($0.index), text: $0.value, isPictograph: Self.isPictograph($0.annotation.description_p))
+            }
         focusedID = output.candidateWindow.hasFocusedIndex ? Int(output.candidateWindow.focusedIndex) : nil
+    }
+
+    private static func isPictograph(_ description: String) -> Bool {
+        description.hasPrefix("絵文字") || description.hasPrefix("顔文字")
     }
 }
