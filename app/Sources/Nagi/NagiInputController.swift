@@ -105,10 +105,9 @@ final class NagiInputController: IMKInputController {
                 replacementRange: NSRange(location: NSNotFound, length: 0)
             )
         } else {
-            let text = output.preedit.segment.map(\.value).joined()
             let selection = NSRange(location: Int(output.preedit.cursor), length: 0)
             client.setMarkedText(
-                text,
+                markedText(for: output.preedit),
                 selectionRange: selection,
                 replacementRange: NSRange(location: NSNotFound, length: 0)
             )
@@ -119,6 +118,32 @@ final class NagiInputController: IMKInputController {
         } else {
             candidateWindow.hide()
         }
+    }
+
+    /// Renders `preedit.segment` as an attributed string so the segment
+    /// currently under operation (`Segment.Annotation.highlight`) reads as
+    /// visually distinct from the rest — plain `joined()` gave every
+    /// segment the same underline, making it unclear which one arrow-key
+    /// reconversion was about to affect (#7). Mirrors how Mozc's own
+    /// renderer treats these two annotations: a thick underline plus a
+    /// selection-colored background for the active segment, a thin
+    /// underline for everything else.
+    private func markedText(for preedit: Mozc_Commands_Preedit) -> NSAttributedString {
+        let text = NSMutableAttributedString()
+        for segment in preedit.segment {
+            let attributes: [NSAttributedString.Key: Any]
+            switch segment.annotation {
+            case .highlight:
+                attributes = [
+                    .underlineStyle: NSUnderlineStyle.thick.rawValue,
+                    .backgroundColor: NSColor.selectedTextBackgroundColor,
+                ]
+            case .underline, .none:
+                attributes = [.underlineStyle: NSUnderlineStyle.single.rawValue]
+            }
+            text.append(NSAttributedString(string: segment.value, attributes: attributes))
+        }
+        return text
     }
 
     /// Caret geometry in screen coordinates, per
