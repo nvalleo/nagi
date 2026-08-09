@@ -78,12 +78,13 @@ Split in two once implementation made the remaining scope clearer:
 
 **Exit criterion:** using nagi as the active IME, `konnnichiha` shows a
 candidate window with `こんにちは` selectable, Enter commits it, **with no
-other Mozc-based IME installed or running.** Confirmed on the dev machine
-end-to-end (session create → convert → candidate window → commit) against
-the bundled `NagiConverter`, though full from-clean-machine verification
-(Google 日本語入力 actually uninstalled, not just untested) is still
-outstanding. Instruments Time Profiler median key-to-paint within 16 ms —
-not yet measured.
+other Mozc-based IME installed or running. Confirmed on the dev machine**
+after actually uninstalling Google 日本語入力 — `NagiConverter` keeps
+working with no logout/reboot needed, since it's an independent LaunchAgent
+registration, not a Text Input Source registry change (that reboot
+requirement, from M1, is a separate mechanism and still applies to Nagi's
+own registration — see docs/architecture.md). Instruments Time Profiler
+median key-to-paint within 16 ms — not yet measured.
 
 Two issues found while dogfooding M2a, neither blocking: multi-segment
 conversions don't visually distinguish the currently-active segment
