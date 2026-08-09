@@ -83,6 +83,41 @@ $SUDO cp -R "$SRC" "$DEST"
 $SUDO xattr -cr "$DEST"
 $SUDO touch "$DEST"
 
+# M2b: register the bundled NagiConverter as a launchd Mach service. This
+# is a per-user LaunchAgent regardless of --system — Program can point at
+# a system-wide path fine (Google's own installer does exactly this for
+# its own Converter service). Re-bootstrap on every install so a changed
+# $DEST (e.g. switching --system on/off) is picked up; bootout first
+# since bootstrap errors on an already-loaded label instead of replacing
+# it.
+CONVERTER_LABEL="com.nvleo.inputmethod.nagi.Converter"
+CONVERTER_PLIST="$HOME/Library/LaunchAgents/$CONVERTER_LABEL.plist"
+CONVERTER_PROGRAM="$DEST/Contents/Resources/NagiConverter.app/Contents/MacOS/NagiConverter"
+
+echo "Registering $CONVERTER_LABEL ..."
+mkdir -p "$HOME/Library/LaunchAgents"
+cat > "$CONVERTER_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Program</key>
+	<string>$CONVERTER_PROGRAM</string>
+	<key>Label</key>
+	<string>$CONVERTER_LABEL</string>
+	<key>MachServices</key>
+	<dict>
+		<key>$CONVERTER_LABEL.session</key>
+		<true/>
+	</dict>
+	<key>KeepAlive</key>
+	<false/>
+</dict>
+</plist>
+PLIST
+launchctl bootout "gui/$(id -u)/$CONVERTER_LABEL" >/dev/null 2>&1 || true
+launchctl bootstrap "gui/$(id -u)" "$CONVERTER_PLIST"
+
 echo
 echo "Installed. macOS won't notice a new/changed Input Method until you:"
 echo "  1. Reboot the machine (logging out and back in is NOT enough —"

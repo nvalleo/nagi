@@ -43,7 +43,7 @@ not the IMKit code itself — see
 [docs/architecture.md](architecture.md#getting-registered-as-a-text-input-source-learned-the-hard-way-in-m1)
 for the three silent requirements that took most of the milestone to find.
 
-## M2 — Candidate window with Mozc backend (2–3 weeks) — M2a done
+## M2 — Candidate window with Mozc backend (2–3 weeks) — done
 
 The first real product moment. All keystrokes go through `mozc_server`, and
 the candidate window is our own `NSPanel`.
@@ -61,16 +61,30 @@ Split in two once implementation made the remaining scope clearer:
   cancel — all handled by `mozc_server`'s own session state machine, not
   reimplemented locally. Still piggybacks on an installed Google 日本語入力
   for the Converter service, same as the M0 PoC.
-- **M2b — not started, tracked as [#9](https://github.com/nv-leo/nagi/issues/9).**
-  Bundling our own `mozc_server` (Bazel cross-build for arm64+x86_64, our
-  own launchd label) so Nagi doesn't depend on another IME being installed.
-  Flagged as "feasible, not trivial" in docs/architecture.md's risk list;
-  deliberately not attempted in the same pass as M2a.
+- **M2b — done, [#9](https://github.com/nv-leo/nagi/issues/9).** Nagi now
+  bundles its own `mozc_server` (rebranded "NagiConverter") built from a
+  pinned google/mozc tag via `scripts/build-mozc-server.sh` — Bazel
+  cross-build (arm64 + x86_64, `lipo`'d together, same pattern as
+  `build-app.sh` uses for Nagi itself) of just `//server:mozc_server_macos`,
+  skipping the Qt/GUI-dependent parts of the upstream build entirely.
+  Registered as its own launchd Mach service
+  (`com.nvleo.inputmethod.nagi.Converter`) by `install-ime.sh`, replacing
+  the Google 日本語入力 piggyback from M2a/M0. See
+  `scripts/mozc-patches/nagi-branding.patch` for the two-line-looking but
+  easy-to-half-do rebrand this needed — `config.bzl`'s
+  `MACOS_BUNDLE_ID_PREFIX` only reaches `Info.plist`; the actual runtime
+  Mach service name comes from a separate hardcoded constant in mozc's own
+  `base/mac/mac_util.mm`.
 
 **Exit criterion:** using nagi as the active IME, `konnnichiha` shows a
-candidate window with `こんにちは` selectable, Enter commits it. **Confirmed
-on the dev machine** (M2a). Instruments Time Profiler median key-to-paint
-within 16 ms — not yet measured; do this before calling M2 fully done.
+candidate window with `こんにちは` selectable, Enter commits it, **with no
+other Mozc-based IME installed or running. Confirmed on the dev machine**
+after actually uninstalling Google 日本語入力 — `NagiConverter` keeps
+working with no logout/reboot needed, since it's an independent LaunchAgent
+registration, not a Text Input Source registry change (that reboot
+requirement, from M1, is a separate mechanism and still applies to Nagi's
+own registration — see docs/architecture.md). Instruments Time Profiler
+median key-to-paint within 16 ms — not yet measured.
 
 Two issues found while dogfooding M2a, neither blocking: multi-segment
 conversions don't visually distinguish the currently-active segment

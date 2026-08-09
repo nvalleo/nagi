@@ -30,21 +30,28 @@ Nagi.app/
 │   ├── MacOS/
 │   │   └── Nagi                    # IMKit host, Swift, foreground
 │   ├── Resources/
-│   │   ├── mozc_server             # bundled, launched on demand
-│   │   ├── mozc_tool               # (optional) config / dictionary UI
-│   │   └── dictionary/             # Mozc's system dictionary blobs
+│   │   └── NagiConverter.app       # our own mozc_server, rebranded (M2b)
 │   └── Info.plist                  # declares InputMethodKit connection
 ```
 
-`mozc_server` is launched as a child process on first key event and kept alive
-for the session. The IPC endpoint is **not** a Unix domain socket on macOS —
-see "Mozc IPC" below, confirmed against upstream source and verified
-end-to-end in [`poc/`](../poc) (M0). It's a Mach bootstrap service registered
-via launchd, under our own launchd label once we bundle our own
-`mozc_server` (M2b, tracked as
-[#9](https://github.com/nv-leo/nagi/issues/9)); for now both the PoC and
-the M2a app piggyback on Google 日本語入力's
-`com.google.inputmethod.Japanese.Converter.session` service.
+No separate `mozc_tool`/`dictionary/` — the OSS build embeds the dictionary
+data directly into the server binary (via Bazel genrules under
+`data_manager/`), and we don't build or bundle the Qt-based `mozc_tool` GUI
+at all (see `scripts/build-mozc-server.sh` — only
+`//server:mozc_server_macos` is built, deliberately skipping everything
+Qt-dependent).
+
+The IPC endpoint is **not** a Unix domain socket on macOS, and Nagi does
+**not** launch `NagiConverter` itself as a child process — see "Mozc IPC"
+below, confirmed against upstream source and verified end-to-end in
+[`poc/`](../poc) (M0) and now against our own bundled server (M2b). It's a
+Mach bootstrap service: `install-ime.sh` registers a per-user LaunchAgent
+(`com.nvleo.inputmethod.nagi.Converter`) declaring the service under
+`MachServices`, and **launchd** — not Nagi — starts the `NagiConverter`
+process on demand the first time any client calls `bootstrap_look_up` for
+it, exactly like it does for Google 日本語入力's own Converter service
+(which `poc/`'s M0 CLI still piggybacks on — a deliberate, useful
+difference for a "does Mach IPC even work at all" PoC, not an oversight).
 
 ## OS integration: InputMethodKit
 
@@ -87,6 +94,18 @@ a downloaded macSKK release). Three silent requirements came out of it:
 3. **Changes to the registry key (bundle ID, essentially) only take effect
    after a full reboot**, not a log out/in — the commonly-cited advice —
    and not by restarting `imklaunchagent`/`TextInputMenuAgent` by hand.
+
+Unverified hypothesis, noted during M2b: this reboot requirement may only
+apply to *additions* (a new/changed `TISInputSourceID` becoming
+selectable). *Removal* looks different — uninstalling Google 日本語入力
+made it disappear from System Settings' Input Sources list immediately,
+no logout/reboot, on the same machine where addition-side reboot was
+confirmed required (item 3 above). Plausible explanation: the picker
+checks whether a listed source's backing `.app` still exists at render
+time, which doesn't need the same on-boot directory rescan that noticing
+a *new* bundle apparently does — but this is a guess, not verified
+against source or repeated testing. Flagging here rather than treating it
+as confirmed.
 
 Full write-up, including the long list of things that turned out **not**
 to matter (code-signing identity, hardened runtime, plist format, binary
@@ -166,9 +185,12 @@ concern:
    M0 confirmed Swift can drive the real (Mach-based, see "Mozc IPC" above)
    transport end-to-end against an installed Google 日本語入力 build — this
    risk is downgraded from "unproven" to "pin discipline going forward."
-2. **`mozc_server` bundling.** Building `mozc_server` for arm64 + x86_64 with
-   the Mozc build system (Bazel-based, historically GYP) inside our release
-   pipeline. Feasible, not trivial.
+2. ~~**`mozc_server` bundling.**~~ **Resolved in M2b** ([#9](https://github.com/nv-leo/nagi/issues/9)).
+   `scripts/build-mozc-server.sh` builds `//server:mozc_server_macos` for
+   arm64 + x86_64 with Bazel (the Mozc project's own build system — GYP is
+   deprecated upstream, never a live option) and `lipo`s them together.
+   The one non-obvious part was rebranding the Mach service name — see
+   `scripts/mozc-patches/nagi-branding.patch`.
 3. **SwiftUI paint latency.** Whether we hit 16 ms consistently for the
    candidate window, especially the first-paint case after focus change.
 4. **`IMKInputController` edge cases.** Focus loss, IME switch mid-composition,

@@ -57,6 +57,18 @@ if [ ! -d "$REPO_ROOT/poc/Sources/NagiMozcProto/Generated" ]; then
   exit 1
 fi
 
+# M2b: Nagi bundles its own mozc_server (rebranded "NagiConverter") so it
+# doesn't depend on another Mozc-based IME being installed — see issue #9.
+# Built separately (it's a whole other toolchain — Bazel, full Xcode, not
+# just Swift) via build-mozc-server.sh, not as part of this script.
+MOZC_SERVER_APP="$REPO_ROOT/.mozc-build/output/NagiConverter.app"
+if [ ! -d "$MOZC_SERVER_APP" ]; then
+  echo "error: $MOZC_SERVER_APP is missing." >&2
+  echo "  Run ./scripts/build-mozc-server.sh first (see docs/architecture.md," >&2
+  echo "  \"Mozc IPC\")." >&2
+  exit 1
+fi
+
 CONFIGURATION="${1:-release}"
 case "$CONFIGURATION" in
   debug)
@@ -107,6 +119,9 @@ if [ -f "$APP_DIR/Resources/InfoPlist.strings" ]; then
   # file, which follows the same CFBundleName + per-mode-ID pattern).
   cp "$APP_DIR/Resources/InfoPlist.strings" "$BUNDLE/Contents/Resources/"
 fi
+
+echo "Bundling NagiConverter.app (mozc_server) ..."
+cp -R "$MOZC_SERVER_APP" "$BUNDLE/Contents/Resources/NagiConverter.app"
 
 # CODESIGN_IDENTITY overrides the default ad-hoc ("-") signature — set
 # it to a `security find-identity -v -p codesigning` SHA1 hash to sign
