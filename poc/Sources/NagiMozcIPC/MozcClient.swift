@@ -156,6 +156,18 @@ public actor MozcClient {
         return try await call(input)
     }
 
+    /// Sends a raw `SessionCommand` (e.g. `SUBMIT_CANDIDATE` with an
+    /// explicit `Candidate.id`, for cascading sub-candidate windows,
+    /// which have no dedicated key — mozc's own UI expects a direct
+    /// pick, not keyboard navigation, for those).
+    public func sendCommand(_ command: Mozc_Commands_SessionCommand, session: UInt64) async throws -> Mozc_Commands_Output {
+        var input = Mozc_Commands_Input()
+        input.type = .sendCommand
+        input.id = session
+        input.command = command
+        return try await call(input)
+    }
+
     // MARK: - Transport
 
     private func call(_ input: Mozc_Commands_Input) async throws -> Mozc_Commands_Output {

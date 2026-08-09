@@ -216,6 +216,17 @@ struct CandidateListView: View {
                 .frame(width: 14, alignment: .trailing)
             Text(candidate.text)
                 .font(.system(size: 15))
+            if candidate.hasSubCandidates {
+                // Visual cue that further variants (half/full-width
+                // etc., under "そのほかの文字種" and similar) are one
+                // more press away — only ever true for the focused row
+                // (see CandidateListState.Candidate.hasSubCandidates),
+                // so there's nothing to show on rows the user hasn't
+                // reached yet.
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 3)

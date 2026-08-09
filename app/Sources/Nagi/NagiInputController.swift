@@ -59,6 +59,34 @@ final class NagiInputController: IMKInputController {
     /// where it never resolves would hang key handling in a loop.
     private static let maxAutoAdvance = 20
 
+    /// The most recently applied `Output`, used to check
+    /// `candidateWindow.hasSubCandidateWindow` before forwarding a Right
+    /// arrow press — see `handle(_:client:)`'s sub-candidate entry point.
+    private var lastOutput: Mozc_Commands_Output?
+
+    /// mozc `Candidate.id` values (not `.index` — see
+    /// `CandidateListState.Candidate`) of the cascading sub-candidate
+    /// window currently being browsed (e.g. "そのほかの文字種"'s
+    /// half/full-width variants), and which one is locally focused.
+    /// `nil` outside of that mode.
+    ///
+    /// mozc's protocol has no keyboard-navigable notion of this state —
+    /// verified against the raw protocol that sending the Right arrow
+    /// key itself, from a candidate with `hasSubCandidateWindow`, just
+    /// closes the whole candidate window. `SessionCommand.
+    /// SELECT_CANDIDATE` with an explicit id — the mouse-click path per
+    /// its own doc comment in commands.proto — is the only way in. So
+    /// once entered (see `enterSubCandidateMode`), this state is tracked
+    /// and driven entirely client-side; mozc's own session is left
+    /// completely alone until `commitSubCandidate` issues that command.
+    private var subCandidateIDs: [Int32] = []
+    private var subCandidateFocusedIndex: Int?
+    /// The parent `Output` whose focused candidate had the sub-window —
+    /// restored to redisplay the parent list on exiting (Left/Escape),
+    /// and its `subCandidateWindow.candidate` re-read on every
+    /// `moveSubCandidateFocus` to render the sub-list itself.
+    private var subCandidateParentOutput: Mozc_Commands_Output?
+
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
         guard sessionID == nil else { return }
@@ -91,6 +119,45 @@ final class NagiInputController: IMKInputController {
         guard let sessionID else { return false }
         guard let keyEvent = MozcKeyEventMapping.keyEvent(for: event) else { return false }
 
+        if subCandidateFocusedIndex != nil {
+            switch keyEvent.specialKey {
+            case .down, .space:
+                // Space advances the *parent* candidate list too (it's
+                // conversion-cycling's own next-candidate key, distinct
+                // from Down's prediction-cycling — see
+                // CandidateListState.update's doc comment) — the sub-
+                // candidate list only has one navigation model, so both
+                // keys drive it the same way here.
+                moveSubCandidateFocus(by: 1, keyEvent: keyEvent, session: sessionID, client: client)
+                return true
+            case .up:
+                moveSubCandidateFocus(by: -1, keyEvent: keyEvent, session: sessionID, client: client)
+                return true
+            case .enter:
+                commitSubCandidate(session: sessionID, client: client)
+                return true
+            case .left, .escape:
+                exitSubCandidateMode(client: client)
+                return true
+            default:
+                // Not a sub-cascade key — drop the local state and let
+                // it fall through to mozc normally below. Safe: mozc's
+                // own session was never touched while browsing the
+                // sub-list, only queried for its (already-cached)
+                // subCandidateWindow contents.
+                subCandidateIDs = []
+                subCandidateFocusedIndex = nil
+                subCandidateParentOutput = nil
+            }
+        } else if keyEvent.specialKey == .right,
+            let lastOutput,
+            lastOutput.candidateWindow.hasFocusedIndex,
+            lastOutput.candidateWindow.hasSubCandidateWindow
+        {
+            enterSubCandidateMode(from: lastOutput, client: client)
+            return true
+        }
+
         var output: Mozc_Commands_Output
         do {
             output = try MozcBridge.sendKey(keyEvent, session: sessionID)
@@ -118,6 +185,24 @@ final class NagiInputController: IMKInputController {
         // doc comment for why the very first repeat must not trigger it.
         let initialFocusedIndex = output.candidateWindow.hasFocusedIndex ? output.candidateWindow.focusedIndex : nil
         if output.hasCandidateWindow, initialFocusedIndex != nil, initialFocusedIndex == lastFocusedIndex {
+            // The stalled candidate itself has further variants ("その
+            // ほかの文字種" and similar, e.g. half/full-width) — the
+            // repeat press isn't dead input to wait out, there's
+            // somewhere for it to go. Descend into the sub-candidates
+            // immediately, the same place Right arrow leads to
+            // explicitly (see enterSubCandidateMode), so continuing to
+            // press the same navigation key reads as the list simply
+            // continuing rather than requiring a different key. No
+            // repeatGraceThreshold delay here, unlike the plain-stall
+            // case below: this isn't a silent skip past something the
+            // user might have wanted to select, it's revealing more of
+            // what's conceptually the same list.
+            if output.candidateWindow.hasFocusedIndex, output.candidateWindow.hasSubCandidateWindow {
+                lastFocusedIndex = output.candidateWindow.focusedIndex
+                lastOutput = output
+                enterSubCandidateMode(from: output, client: client)
+                return true
+            }
             repeatedFocusStreak += 1
         } else {
             repeatedFocusStreak = 0
@@ -139,6 +224,7 @@ final class NagiInputController: IMKInputController {
             autoAdvanceCount += 1
         }
         lastFocusedIndex = output.candidateWindow.hasFocusedIndex ? output.candidateWindow.focusedIndex : nil
+        lastOutput = output
 
         apply(output, client: client)
         return output.consumed
@@ -158,6 +244,7 @@ final class NagiInputController: IMKInputController {
         guard let sessionID else { return }
         do {
             let output = try MozcBridge.submit(session: sessionID)
+            lastOutput = output
             apply(output, client: client)
         } catch {
             NSLog("Nagi: submit failed: \(error)")
@@ -169,6 +256,179 @@ final class NagiInputController: IMKInputController {
         // progress.
         lastFocusedIndex = nil
         repeatedFocusStreak = 0
+        subCandidateIDs = []
+        subCandidateFocusedIndex = nil
+        subCandidateParentOutput = nil
+    }
+
+    /// Enters cascading sub-candidate browsing (`output.candidateWindow.
+    /// subCandidateWindow`) — see `subCandidateIDs`'s doc comment for why
+    /// this is entirely client-side from here on.
+    private func enterSubCandidateMode(from output: Mozc_Commands_Output, client: IMKTextInput) {
+        let subCandidates = output.candidateWindow.subCandidateWindow.candidate
+        guard !subCandidates.isEmpty else { return }
+        subCandidateIDs = subCandidates.map(\.id)
+        subCandidateFocusedIndex = 0
+        subCandidateParentOutput = output
+        renderSubCandidates(client: client)
+    }
+
+    /// Neither direction wraps *within* the sub-candidate list itself —
+    /// both ends hand off to the parent list instead, so the whole
+    /// thing (main candidates → sub-candidates → back to the first main
+    /// candidate) reads as one continuous loop, matching how entering
+    /// is now just "keep pressing the same key" (see
+    /// `handle(_:client:)`'s stall-with-subCandidateWindow branch).
+    /// Moving up past the first sub-candidate returns to right where
+    /// the parent list was left, at no cost — mozc's own session was
+    /// never touched while browsing. Moving down past the last one is
+    /// the harder direction: mozc's session is still sitting on the
+    /// same stalled focusedIndex it was at on entry, so getting back to
+    /// the first main candidate means resuming its own stall countdown
+    /// — see `exitSubCandidateModeAndWrapToStart`.
+    private func moveSubCandidateFocus(by delta: Int, keyEvent: Mozc_Commands_KeyEvent, session: UInt64, client: IMKTextInput) {
+        guard let index = subCandidateFocusedIndex, !subCandidateIDs.isEmpty else { return }
+        let newIndex = index + delta
+        if newIndex < 0 {
+            exitSubCandidateMode(client: client)
+            return
+        }
+        if newIndex >= subCandidateIDs.count {
+            exitSubCandidateModeAndWrapToStart(keyEvent: keyEvent, session: session, client: client)
+            return
+        }
+        subCandidateFocusedIndex = newIndex
+        renderSubCandidates(client: client)
+    }
+
+    /// Continuing forward past the last sub-candidate completes the
+    /// "one continuous list" loop back to the first main candidate,
+    /// instead of looping within the sub-candidates alone — see
+    /// `moveSubCandidateFocus`'s doc comment. mozc's own session was
+    /// left completely untouched while sub-candidates were being
+    /// browsed, so it's still sitting on the exact same stalled
+    /// focusedIndex it reported on entry; replaying the same key here
+    /// drives it the rest of the way through its own
+    /// `CandidateWindow.pageSize`-bounded stall, the same mechanism
+    /// `handle(_:client:)`'s own end-of-list auto-advance loop uses.
+    private func exitSubCandidateModeAndWrapToStart(keyEvent: Mozc_Commands_KeyEvent, session: UInt64, client: IMKTextInput) {
+        guard let stalledOutput = subCandidateParentOutput, stalledOutput.candidateWindow.hasFocusedIndex else {
+            exitSubCandidateMode(client: client)
+            return
+        }
+        let stalledIndex = stalledOutput.candidateWindow.focusedIndex
+        subCandidateIDs = []
+        subCandidateFocusedIndex = nil
+        subCandidateParentOutput = nil
+
+        var output = stalledOutput
+        var advanceCount = 0
+        while output.candidateWindow.hasFocusedIndex,
+            output.candidateWindow.focusedIndex == stalledIndex,
+            advanceCount < Self.maxAutoAdvance
+        {
+            do {
+                output = try MozcBridge.sendKey(keyEvent, session: session)
+            } catch {
+                NSLog("Nagi: sendKey (sub-candidate wrap) failed: \(error)")
+                break
+            }
+            advanceCount += 1
+        }
+        lastFocusedIndex = output.candidateWindow.hasFocusedIndex ? output.candidateWindow.focusedIndex : nil
+        lastOutput = output
+        repeatedFocusStreak = 0
+        apply(output, client: client)
+    }
+
+    private func renderSubCandidates(client: IMKTextInput) {
+        guard let subCandidateParentOutput, let subCandidateFocusedIndex else { return }
+        let subCandidates = subCandidateParentOutput.candidateWindow.subCandidateWindow.candidate
+        candidateWindow.showSubCandidates(
+            subCandidates,
+            focusedIndex: subCandidateFocusedIndex,
+            belowCaret: caretRect(client: client)
+        )
+        if subCandidates.indices.contains(subCandidateFocusedIndex) {
+            previewSubCandidate(subCandidates[subCandidateFocusedIndex], in: subCandidateParentOutput, client: client)
+        }
+    }
+
+    /// Shows the locally-focused sub-candidate in the text field itself
+    /// (the underlined preview text), not just in the sub-candidate
+    /// window's own list — without this, moving through "そのほかの
+    /// 文字種" and its like changed what was highlighted in the popup
+    /// but never what the user actually saw being composed, since
+    /// mozc's own session (and therefore its `preedit`) is never
+    /// touched while browsing (see `subCandidateIDs`'s doc comment).
+    /// Substitutes the candidate's text into a *copy* of the parent
+    /// output's preedit — specifically the segment currently under
+    /// conversion (`Segment.Annotation.highlight`, the same one
+    /// `markedText(for:)` gives the "active segment" styling to) — and
+    /// renders that, exactly like `apply(_:client:)` would for a real
+    /// `Output`. `exitSubCandidateMode` undoes this by re-applying the
+    /// real, unmodified `parentOutput` when backing out without
+    /// selecting.
+    private func previewSubCandidate(_ candidate: Mozc_Commands_CandidateWindow.Candidate, in parentOutput: Mozc_Commands_Output, client: IMKTextInput) {
+        guard let highlightIndex = parentOutput.preedit.segment.firstIndex(where: { $0.annotation == .highlight })
+        else { return }
+        var preedit = parentOutput.preedit
+        preedit.segment[highlightIndex].value = candidate.value
+        let text = markedText(for: preedit)
+        client.setMarkedText(
+            text,
+            selectionRange: NSRange(location: text.length, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+    }
+
+    /// Commits the locally-focused sub-candidate: `SELECT_CANDIDATE`
+    /// (the mouse-click equivalent — see `subCandidateIDs`'s doc
+    /// comment) moves it into the preedit and closes the sub-window,
+    /// verified against the raw protocol to *not* itself commit, so a
+    /// normal `SUBMIT` follows, exactly like Enter would on the parent
+    /// list.
+    private func commitSubCandidate(session: UInt64, client: IMKTextInput) {
+        guard let index = subCandidateFocusedIndex, subCandidateIDs.indices.contains(index) else {
+            exitSubCandidateMode(client: client)
+            return
+        }
+        let id = subCandidateIDs[index]
+        subCandidateIDs = []
+        subCandidateFocusedIndex = nil
+        subCandidateParentOutput = nil
+        do {
+            var select = Mozc_Commands_SessionCommand()
+            select.type = .selectCandidate
+            select.id = id
+            _ = try MozcBridge.sendCommand(select, session: session)
+            let output = try MozcBridge.submit(session: session)
+            lastOutput = output
+            lastFocusedIndex = nil
+            repeatedFocusStreak = 0
+            apply(output, client: client)
+        } catch {
+            NSLog("Nagi: sub-candidate select/submit failed: \(error)")
+        }
+    }
+
+    /// Backs out of sub-candidate browsing (Left/Escape) without
+    /// committing anything, restoring the parent candidate list — mozc's
+    /// own session was never touched while browsing, so there's nothing
+    /// to undo there. Goes through `apply(_:client:)`, not just
+    /// `candidateWindow.show`, so the text-field preview
+    /// `previewSubCandidate` overwrote gets put back to the real,
+    /// unmodified parent preedit too.
+    private func exitSubCandidateMode(client: IMKTextInput) {
+        let parentOutput = subCandidateParentOutput
+        subCandidateIDs = []
+        subCandidateFocusedIndex = nil
+        subCandidateParentOutput = nil
+        if let parentOutput {
+            apply(parentOutput, client: client)
+        } else {
+            candidateWindow.hide()
+        }
     }
 
     private func apply(_ output: Mozc_Commands_Output, client: IMKTextInput) {

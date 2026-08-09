@@ -53,7 +53,21 @@ final class CandidateWindowController {
     /// — see docs/architecture.md, "OS integration: InputMethodKit".
     func show(_ output: Mozc_Commands_Output, belowCaret caretRect: NSRect) {
         state.update(from: output)
+        reposition(belowCaret: caretRect)
+    }
 
+    /// Shows a cascading sub-candidate window in place of the parent
+    /// list — see `CandidateListState.updateSubCandidates(_:focusedIndex:)`
+    /// and `NagiInputController`'s sub-candidate handling for why this
+    /// needs its own entry point instead of going through `show(_:
+    /// belowCaret:)`: there's no real `Output` for this state, since
+    /// mozc itself isn't tracking it.
+    func showSubCandidates(_ subCandidates: [Mozc_Commands_CandidateWindow.Candidate], focusedIndex: Int, belowCaret caretRect: NSRect) {
+        state.updateSubCandidates(subCandidates, focusedIndex: focusedIndex)
+        reposition(belowCaret: caretRect)
+    }
+
+    private func reposition(belowCaret caretRect: NSRect) {
         guard let hostingView = panel.contentView as? NSHostingView<CandidateListView> else { return }
         // fittingSize resolves SwiftUI's ideal size for whatever
         // CandidateListView.visibleRows currently windows into view —

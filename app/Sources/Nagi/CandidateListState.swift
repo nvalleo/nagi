@@ -25,6 +25,13 @@ final class CandidateListState: ObservableObject {
         /// consecutive runs of these into a grid instead of the plain
         /// list.
         let isPictograph: Bool
+        /// True only for the currently-*focused* candidate, and only
+        /// when `CandidateWindow.hasSubCandidateWindow` — mozc only
+        /// populates `subCandidateWindow` for whichever candidate is
+        /// focused right now, so this can't be known ahead of time for
+        /// candidates the user hasn't reached yet (see `update(from:)`).
+        /// Drives a small "▶" hint in `CandidateListView`.
+        let hasSubCandidates: Bool
     }
 
     @Published private(set) var candidates: [Candidate] = []
@@ -62,10 +69,34 @@ final class CandidateListState: ObservableObject {
     /// crossing one just swaps in the next page's candidates), which is
     /// the lesser bug of the two.
     func update(from output: Mozc_Commands_Output) {
-        candidates = output.candidateWindow.candidate.map {
-            Candidate(id: Int($0.index), text: $0.value, isPictograph: Self.isPictograph($0.annotation.description_p))
+        let focusedIndex = output.candidateWindow.hasFocusedIndex ? Int(output.candidateWindow.focusedIndex) : nil
+        let subCandidateIndicatorIndex = output.candidateWindow.hasSubCandidateWindow ? focusedIndex : nil
+        update(rawCandidates: output.candidateWindow.candidate, focusedIndex: focusedIndex, subCandidateIndicatorIndex: subCandidateIndicatorIndex)
+    }
+
+    /// Renders a cascading sub-candidate window (`CandidateWindow.
+    /// subCandidateWindow` — half/full-width variants under "そのほかの
+    /// 文字種" and similar) in place of the parent list. mozc has no
+    /// keyboard-navigable protocol support for these (see
+    /// `NagiInputController`'s sub-candidate handling), so `focusedIndex`
+    /// here is `NagiInputController`'s own locally-tracked position, not
+    /// anything mozc reported.
+    func updateSubCandidates(_ subCandidates: [Mozc_Commands_CandidateWindow.Candidate], focusedIndex: Int) {
+        // Sub-candidate windows don't themselves nest further sub-
+        // candidate windows, so there's never a "▶" hint to show here.
+        update(rawCandidates: subCandidates, focusedIndex: focusedIndex, subCandidateIndicatorIndex: nil)
+    }
+
+    private func update(rawCandidates: [Mozc_Commands_CandidateWindow.Candidate], focusedIndex: Int?, subCandidateIndicatorIndex: Int?) {
+        candidates = rawCandidates.map {
+            Candidate(
+                id: Int($0.index),
+                text: $0.value,
+                isPictograph: Self.isPictograph($0.annotation.description_p),
+                hasSubCandidates: Int($0.index) == subCandidateIndicatorIndex
+            )
         }
-        focusedID = output.candidateWindow.hasFocusedIndex ? Int(output.candidateWindow.focusedIndex) : nil
+        focusedID = focusedIndex
     }
 
     private static func isPictograph(_ description: String) -> Bool {
