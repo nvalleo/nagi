@@ -52,6 +52,10 @@ enum MozcBridge {
         try runSync { try await client.submit(session: session) }
     }
 
+    static func sendCommand(_ command: Mozc_Commands_SessionCommand, session: UInt64) throws -> Mozc_Commands_Output {
+        try runSync { try await client.sendCommand(command, session: session) }
+    }
+
     private static func runSync<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
         let semaphore = DispatchSemaphore(value: 0)
         let box = ResultBox<T>()

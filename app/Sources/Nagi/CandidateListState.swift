@@ -25,33 +25,78 @@ final class CandidateListState: ObservableObject {
         /// consecutive runs of these into a grid instead of the plain
         /// list.
         let isPictograph: Bool
+        /// True only for the currently-*focused* candidate, and only
+        /// when `CandidateWindow.hasSubCandidateWindow` — mozc only
+        /// populates `subCandidateWindow` for whichever candidate is
+        /// focused right now, so this can't be known ahead of time for
+        /// candidates the user hasn't reached yet (see `update(from:)`).
+        /// Drives a small "▶" hint in `CandidateListView`.
+        let hasSubCandidates: Bool
     }
 
     @Published private(set) var candidates: [Candidate] = []
+    /// Not a bug if this appears to "stick" on the same value for
+    /// several keystrokes in a row near the end of a short candidate
+    /// list: verified against the raw protocol (bypassing this app's
+    /// UI entirely) that mozc_server itself holds `focusedIndex` on the
+    /// last real candidate for exactly `CandidateWindow.pageSize` (9 by
+    /// default) more Space/Down presses before wrapping back to the
+    /// first candidate — this class and `CandidateListView` just
+    /// reflect whatever mozc reports here faithfully. Cost real time to
+    /// track down (see #21) after this repeatedly looked like a
+    /// SwiftUI rendering freeze.
     @Published private(set) var focusedID: Int?
 
-    /// M3b (#14): reads from `Output.allCandidateWords`, not just
-    /// `Output.candidateWindow.candidate` — the latter is whichever page
-    /// mozc's own paginated UI last rendered (bounded to
-    /// `CandidateWindow.pageSize`, 9 by default; the array itself is
-    /// swapped out wholesale on page-forward/back, e.g. indices 0–8 become
-    /// 9–17). `allCandidateWords` carries every candidate for the current
-    /// conversion as one flat list with stable absolute indices — verified
-    /// against `candidateWindow.focusedIndex`, which tracks that same
-    /// absolute index across page boundaries — which is what lets
-    /// `CandidateListView` scroll one continuous list instead of
-    /// re-implementing mozc's page-flip UI. Falls back to
-    /// `candidateWindow.candidate` for the rare category that doesn't
-    /// populate `allCandidateWords`.
+    /// Reads from `Output.candidateWindow.candidate` — whichever page
+    /// mozc's own session state machine is actually cycling through
+    /// right now (bounded to `CandidateWindow.pageSize`, 9 by default).
+    ///
+    /// M3b (#14) switched this to `Output.allCandidateWords` instead, on
+    /// the theory that its indices line up with `candidateWindow.
+    /// focusedIndex` across page boundaries, avoiding a re-implementation
+    /// of mozc's page-flip UI. That held for Down-key navigation
+    /// (verified against "こうしょう") but turned out **not** to hold in
+    /// general (#21): Space (conversion) and Down (prediction) cycle
+    /// through *different* candidate sets in mozc, of different sizes —
+    /// for one short reading, allCandidateWords reported 11 entries
+    /// while Space's own focusedIndex only ever reached 6 of them
+    /// before wrapping. The list rendered candidates the user could
+    /// never actually select. `candidateWindow.candidate` doesn't have
+    /// that risk: it's definitionally whatever the *current* navigation
+    /// mode is cycling through, since it's the same field `focusedIndex`
+    /// itself is reported against. The tradeoff is back to M3b's
+    /// original problem (no continuous scroll across page boundaries —
+    /// crossing one just swaps in the next page's candidates), which is
+    /// the lesser bug of the two.
     func update(from output: Mozc_Commands_Output) {
-        candidates = output.allCandidateWords.candidates.isEmpty
-            ? output.candidateWindow.candidate.map {
-                Candidate(id: Int($0.index), text: $0.value, isPictograph: Self.isPictograph($0.annotation.description_p))
-            }
-            : output.allCandidateWords.candidates.map {
-                Candidate(id: Int($0.index), text: $0.value, isPictograph: Self.isPictograph($0.annotation.description_p))
-            }
-        focusedID = output.candidateWindow.hasFocusedIndex ? Int(output.candidateWindow.focusedIndex) : nil
+        let focusedIndex = output.candidateWindow.hasFocusedIndex ? Int(output.candidateWindow.focusedIndex) : nil
+        let subCandidateIndicatorIndex = output.candidateWindow.hasSubCandidateWindow ? focusedIndex : nil
+        update(rawCandidates: output.candidateWindow.candidate, focusedIndex: focusedIndex, subCandidateIndicatorIndex: subCandidateIndicatorIndex)
+    }
+
+    /// Renders a cascading sub-candidate window (`CandidateWindow.
+    /// subCandidateWindow` — half/full-width variants under "そのほかの
+    /// 文字種" and similar) in place of the parent list. mozc has no
+    /// keyboard-navigable protocol support for these (see
+    /// `NagiInputController`'s sub-candidate handling), so `focusedIndex`
+    /// here is `NagiInputController`'s own locally-tracked position, not
+    /// anything mozc reported.
+    func updateSubCandidates(_ subCandidates: [Mozc_Commands_CandidateWindow.Candidate], focusedIndex: Int) {
+        // Sub-candidate windows don't themselves nest further sub-
+        // candidate windows, so there's never a "▶" hint to show here.
+        update(rawCandidates: subCandidates, focusedIndex: focusedIndex, subCandidateIndicatorIndex: nil)
+    }
+
+    private func update(rawCandidates: [Mozc_Commands_CandidateWindow.Candidate], focusedIndex: Int?, subCandidateIndicatorIndex: Int?) {
+        candidates = rawCandidates.map {
+            Candidate(
+                id: Int($0.index),
+                text: $0.value,
+                isPictograph: Self.isPictograph($0.annotation.description_p),
+                hasSubCandidates: Int($0.index) == subCandidateIndicatorIndex
+            )
+        }
+        focusedID = focusedIndex
     }
 
     private static func isPictograph(_ description: String) -> Bool {
