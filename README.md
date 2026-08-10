@@ -1,10 +1,35 @@
-# nagi
+<p align="center">
+  <img src="docs/images/icon.png" width="120" height="120" alt="Nagi icon — a sun over two calming waves">
+</p>
 
-> A modern, lightweight Japanese IME for macOS — the conversion quality you
-> already know, in a candidate window that finally looks like it was made this
-> decade.
+<h1 align="center">nagi</h1>
 
-**Status:** pre-alpha. Everything below is a plan.
+<p align="center">
+  A modern, lightweight Japanese IME for macOS — the conversion quality you<br>
+  already know, in a candidate window that finally looks like it was made this decade.
+</p>
+
+<p align="center">
+  <a href="README-JP.md">日本語</a> ・ English
+</p>
+
+<p align="center">
+  <img alt="status: pre-alpha" src="https://img.shields.io/badge/status-pre--alpha-lightgrey">
+  <img alt="platform: macOS" src="https://img.shields.io/badge/platform-macOS-black">
+  <img alt="license: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue">
+</p>
+
+---
+
+## Contents
+
+- [What it is](#what-it-is)
+- [Why another Japanese IME](#why-another-japanese-ime)
+- [Non-goals](#non-goals)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Performance targets](#performance-targets)
+- [Development](#development)
+- [License](#license)
 
 ## What it is
 
@@ -13,8 +38,9 @@ open-source core of Google 日本語入力) and puts a native SwiftUI candidate
 window on top of it. The engine ships inside the app bundle — no separate
 Google 日本語入力 install required.
 
-The name is 凪 — the calm, wind-free state of the sea. That is the input
-experience we are aiming for: light, quiet, predictable.
+The name is 凪 — the calm, wind-free state of the sea, the moment when the
+wind dies down and the water goes still. That is the input experience we
+are aiming for: light, quiet, predictable.
 
 ## Why another Japanese IME
 
@@ -65,9 +91,10 @@ macOS.
 │   │ SwiftProtobuf)             │   │
 │   └────────────┬───────────────┘   │
 └────────────────┼───────────────────┘
-                 │ Unix domain socket
+                 │ Mach IPC
 ┌────────────────▼───────────────────┐
-│ mozc_server (bundled, C++)         │
+│ mozc_server (bundled, C++,         │
+│ rebranded "NagiConverter")         │
 │   converter, dictionary, learning  │
 └────────────────────────────────────┘
 ```
@@ -87,9 +114,9 @@ puts them at risk.
 
 ## Development
 
-Nothing to build yet — the repository currently contains the plan and a
-`poc/` scaffold. See [`poc/README.md`](poc/README.md) for the first thing to
-try: getting Swift to speak Mozc's IPC protocol.
+See [`poc/README.md`](poc/README.md) for the M0 proof-of-concept (Swift ↔
+Mozc IPC) and [`app/README.md`](app/README.md) for the IMKit app itself —
+build, install, and the `scripts/install-ime.sh` flow.
 
 ## License
 
@@ -97,4 +124,4 @@ Apache License 2.0 — see [LICENSE](LICENSE). Chosen for compatibility with
 Mozc's BSD 3-Clause license and for its explicit patent grant.
 
 Mozc itself remains under its original BSD 3-Clause license; the bundled
-`mozc_server` binary and any Mozc-derived code will carry that notice.
+`mozc_server` binary and any Mozc-derived code carry that notice.
