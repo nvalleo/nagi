@@ -28,6 +28,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Plain-text fallback on non-interactive/no-color terminals — never the
+# only way information is conveyed (numbers/checkmarks carry the meaning
+# too), just a bit easier to scan when available.
+if [ -t 1 ] && command -v tput >/dev/null 2>&1 && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
+  BOLD="$(tput bold)"; DIM="$(tput dim)"; GREEN="$(tput setaf 2)"; RESET="$(tput sgr0)"
+else
+  BOLD=""; DIM=""; GREEN=""; RESET=""
+fi
+heading() { printf '\n%s%s%s\n' "$BOLD" "$*" "$RESET"; }
+done_step() { printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$*"; }
+
 CONFIGURATION="release"
 SYSTEM_WIDE=false
 for arg in "$@"; do
@@ -83,51 +94,23 @@ $SUDO cp -R "$SRC" "$DEST"
 $SUDO xattr -cr "$DEST"
 $SUDO touch "$DEST"
 
-# M2b: register the bundled NagiConverter as a launchd Mach service. This
-# is a per-user LaunchAgent regardless of --system — Program can point at
-# a system-wide path fine (Google's own installer does exactly this for
-# its own Converter service). Re-bootstrap on every install so a changed
-# $DEST (e.g. switching --system on/off) is picked up; bootout first
-# since bootstrap errors on an already-loaded label instead of replacing
-# it.
-CONVERTER_LABEL="com.nvleo.inputmethod.nagi.Converter"
-CONVERTER_PLIST="$HOME/Library/LaunchAgents/$CONVERTER_LABEL.plist"
-CONVERTER_PROGRAM="$DEST/Contents/Resources/NagiConverter.app/Contents/MacOS/NagiConverter"
+heading "Nagi.app installed to $DEST"
+done_step "Built and code-signed"
+done_step "Copied into place"
 
-echo "Registering $CONVERTER_LABEL ..."
-mkdir -p "$HOME/Library/LaunchAgents"
-cat > "$CONVERTER_PLIST" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>Program</key>
-	<string>$CONVERTER_PROGRAM</string>
-	<key>Label</key>
-	<string>$CONVERTER_LABEL</string>
-	<key>MachServices</key>
-	<dict>
-		<key>$CONVERTER_LABEL.session</key>
-		<true/>
-	</dict>
-	<key>KeepAlive</key>
-	<false/>
-</dict>
-</plist>
-PLIST
-launchctl bootout "gui/$(id -u)/$CONVERTER_LABEL" >/dev/null 2>&1 || true
-launchctl bootstrap "gui/$(id -u)" "$CONVERTER_PLIST"
-
-echo
-echo "Installed. macOS won't notice a new/changed Input Method until you:"
+heading "A few manual steps are still needed (macOS, not Nagi, requires these):"
 echo "  1. Reboot the machine (logging out and back in is NOT enough —"
 echo "     the Text Input Source registry only re-scans on a full boot)."
-echo "  2. Open System Settings > Keyboard > Input Sources > Edit... > '+'"
+echo "  2. System Settings > Keyboard > Input Sources > Edit... > '+'"
 echo "  3. Find 'Nagi' under Japanese and add it. Watch for duplicate"
 echo "     'ひらがな' entries if Google Japanese Input / macSKK etc. are"
 echo "     also installed — check the icon to tell them apart."
 echo "  4. Switch to it from the menu bar Input menu and try typing"
 echo "     'nagi' + Enter in TextEdit — expect 'なぎ'."
+echo
+echo "NagiConverter itself needs no separate registration step (#30) —"
+echo "Nagi.app registers it via SMAppService the first time it actually"
+echo "runs, which step 4 above triggers on its own."
 if [ "$SYSTEM_WIDE" != true ]; then
   echo
   echo "If it still doesn't show up under Japanese after that, retry with"
@@ -136,9 +119,18 @@ if [ "$SYSTEM_WIDE" != true ]; then
   echo "this is where other installed IMEs on this machine actually live."
 fi
 echo
-echo "To reinstall after a code change, rerun this script (uninstall +"
-echo "reinstall isn't automatic; delete '$DEST' by hand if you need a"
-echo "clean slate — e.g. after switching input sources away from it). A"
-echo "reboot is only needed again if the bundle ID or"
-echo "InputMethodConnectionName changed; ordinary code changes are"
-echo "picked up by imklaunchagent on the next launch of Nagi."
+echo "${DIM}To reinstall after a code change, rerun this script (uninstall +"
+echo "reinstall isn't automatic — use scripts/uninstall-ime.sh for a clean"
+echo "slate). A reboot is only needed again if the bundle ID or"
+echo "InputMethodConnectionName changed; ordinary code changes are picked"
+echo "up by imklaunchagent on the next launch of Nagi.${RESET}"
+
+# Best-effort convenience: land the user on the right System Settings
+# pane for step 2 above. Not required — silently does nothing if it
+# fails (e.g. no GUI session) rather than treating it as an error, since
+# the manual steps printed above are the actual source of truth. The
+# pane bundle ID is the one System Settings (Ventura's replacement for
+# System Preferences, so this holds for LSMinimumSystemVersion 13.0+)
+# uses for Keyboard; there's no documented deep link straight to the
+# Input Sources edit sheet.
+open "x-apple.systempreferences:com.apple.Keyboard-Settings.extension" >/dev/null 2>&1 || true

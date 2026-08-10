@@ -24,6 +24,7 @@
 ## Contents
 
 - [What it is](#what-it-is)
+- [Install](#install)
 - [Why another Japanese IME](#why-another-japanese-ime)
 - [Non-goals](#non-goals)
 - [Architecture at a glance](#architecture-at-a-glance)
@@ -41,6 +42,26 @@ Google 日本語入力 install required.
 The name is 凪 — the calm, wind-free state of the sea, the moment when the
 wind dies down and the water goes still. That is the input experience we
 are aiming for: light, quiet, predictable.
+
+## Install
+
+No GitHub Release has been cut yet (`nagi` is pre-alpha) — for now,
+building from source is the only option. See
+[`app/README.md`](app/README.md) for the full build/install steps; the
+gist:
+
+```sh
+./scripts/build-dmg.sh   # -> .build-dmg/Nagi-<version>.dmg
+```
+
+then drag `Nagi.app` onto the `Input Methods` alias inside the `.dmg`,
+open it once (macOS will warn it's from an unidentified developer —
+Control-click > Open handles that), and it's ready: no reboot needed to
+show up under System Settings > Keyboard > Input Sources. To remove it
+later, double-click the `Uninstall Nagi.app` bundled in the same `.dmg`.
+
+Once a Release exists, this section will point at the prebuilt `.dmg`
+directly instead.
 
 ## Why another Japanese IME
 

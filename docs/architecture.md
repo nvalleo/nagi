@@ -45,13 +45,50 @@ The IPC endpoint is **not** a Unix domain socket on macOS, and Nagi does
 **not** launch `NagiConverter` itself as a child process — see "Mozc IPC"
 below, confirmed against upstream source and verified end-to-end in
 [`poc/`](../poc) (M0) and now against our own bundled server (M2b). It's a
-Mach bootstrap service: `install-ime.sh` registers a per-user LaunchAgent
-(`com.nvleo.inputmethod.nagi.Converter`) declaring the service under
-`MachServices`, and **launchd** — not Nagi — starts the `NagiConverter`
-process on demand the first time any client calls `bootstrap_look_up` for
-it, exactly like it does for Google 日本語入力's own Converter service
-(which `poc/`'s M0 CLI still piggybacks on — a deliberate, useful
-difference for a "does Mach IPC even work at all" PoC, not an oversight).
+Mach bootstrap service, declared under `MachServices` in a per-user
+LaunchAgent (`com.nvleo.inputmethod.nagi.Converter`), and **launchd** —
+not Nagi — starts the `NagiConverter` process on demand the first time
+any client calls `bootstrap_look_up` for it, exactly like it does for
+Google 日本語入力's own Converter service (which `poc/`'s M0 CLI still
+piggybacks on — a deliberate, useful difference for a "does Mach IPC even
+work at all" PoC, not an oversight).
+
+**Who registers that LaunchAgent changed in M4 (#30).** Originally
+`install-ime.sh` wrote the plist to `~/Library/LaunchAgents/` and called
+`launchctl bootstrap` itself; a since-abandoned `.pkg` installer's
+`postinstall` script briefly did the same thing from outside the app.
+Both worked, but both meant Nagi.app wasn't self-sufficient — something
+external always had to run first. `Nagi.app` now registers its own
+LaunchAgent at runtime via `ServiceManagement.SMAppService`
+(`app/Sources/Nagi/ConverterServiceRegistration.swift`), using a plist
+embedded in the bundle at `Contents/Library/LaunchAgents/` (the fixed
+location `SMAppService.agent(plistName:)` requires) with a
+`BundleProgram` key instead of an absolute `Program` path, so it resolves
+correctly whether Nagi.app ends up at `~/Library/Input Methods/` or
+`/Library/Input Methods/`. Confirmed working end-to-end on the dev
+machine: `launchctl print` on the registered service shows `managed_by =
+com.apple.xpc.ServiceManagement` (absent under the old manual-bootstrap
+approach) and the correct bundle-relative `program identifier`. This is
+what made dropping the custom installer for `scripts/build-dmg.sh`
+possible — see app/README.md's "Prebuilt download (.dmg)".
+
+Nagi is LSUIElement (no Dock icon, no window), so registering silently
+leaves no feedback that anything happened — `ConverterServiceRegistration`
+also posts a one-shot local notification the first time registration
+succeeds, as the only feedback available without adding real UI to a
+headless host process. Getting that notification to actually appear
+took its own debugging round: `registerIfNeeded()` was originally called
+from `main.swift` *before* `NSApplication.shared`/`setActivationPolicy`
+and `app.run()`, and calling `UNUserNotificationCenter`'s
+`requestAuthorization` at that point was unreliable — its completion
+handler either never fired at all, or came back with the error
+"Notifications are not allowed for this application" *even with the
+toggle already on in System Settings*. Moving the call to
+`DispatchQueue.main.async` scheduled just before `app.run()` (so it
+actually runs once the run loop is spinning, not before) fixed it —
+confirmed by manually forcing the notification path on the dev machine.
+SMAppService's own `.register()` call didn't have this problem, only
+`UNUserNotificationCenter` did.
 
 ## OS integration: InputMethodKit
 
@@ -95,17 +132,73 @@ a downloaded macSKK release). Three silent requirements came out of it:
    after a full reboot**, not a log out/in — the commonly-cited advice —
    and not by restarting `imklaunchagent`/`TextInputMenuAgent` by hand.
 
-Unverified hypothesis, noted during M2b: this reboot requirement may only
-apply to *additions* (a new/changed `TISInputSourceID` becoming
-selectable). *Removal* looks different — uninstalling Google 日本語入力
-made it disappear from System Settings' Input Sources list immediately,
-no logout/reboot, on the same machine where addition-side reboot was
-confirmed required (item 3 above). Plausible explanation: the picker
-checks whether a listed source's backing `.app` still exists at render
-time, which doesn't need the same on-boot directory rescan that noticing
-a *new* bundle apparently does — but this is a guess, not verified
-against source or repeated testing. Flagging here rather than treating it
-as confirmed.
+**Resolved, M4 (#30 follow-up) — item 3 turned out not to be a hard
+requirement.** `imklaunchagent` and `TextInputMenuAgent` cache their view
+of the Text Input Source registry once, at their own process startup, and
+never rescan it afterwards — that's the actual mechanism behind "only a
+full reboot works": a reboot is simply what restarts them along with
+everything else. `TISRegisterInputSource`/`TISEnableInputSource` do
+correctly write through to the underlying registry without a reboot
+(verified: a *fresh* process reads the change back correctly); the two
+agents just don't know about it until *they* restart. `launchctl
+kickstart -k` on either is blocked by SIP ("Operation not permitted while
+System Integrity Protection is engaged"), which is almost certainly why
+the "restarting by hand doesn't help" claim above was wrong — that
+earlier attempt never actually restarted anything, SIP silently ate it. A
+plain `kill -HUP` (not going through `launchctl`) does terminate them,
+and launchd immediately respawns both as on-demand agents, which pick up
+the change on the way back up. `Nagi.app` now does exactly this itself —
+`TISRegisterInputSource` + `TISEnableInputSource` (parent bundle, then
+the `Hiragana` mode — a mode can only flip disabled → enabled once its
+parent already is, per `kTISPropertyInputSourceIsEnableCapable`'s
+discussion in `TextInputSources.h`), followed by `kill -HUP` on both
+agents *only* when that actually changed something, i.e. only once, not
+on every launch. See `app/Sources/Nagi/InputSourceRegistration.swift`.
+None of this is documented Apple behavior — if a future macOS version
+changes it, this degrades back to the old reboot-required behavior
+(`enable()` in that file is already unconditionally best-effort), not a
+crash.
+
+**Removal, tested and confirmed end-to-end, M4 (#30 install/uninstall
+follow-up), superseding the hypothesis below.** Full cycle tested on the
+dev machine: install → reboot → add "ひらがな (Nagi)" in System
+Settings → confirmed switchable → run `scripts/uninstall-ime.sh` (a
+plain `rm -rf` of `Nagi.app` plus tearing down the `NagiConverter`
+LaunchAgent) → observe. Two distinct findings came out of that last step:
+
+1. **Passive removal doesn't happen on its own — reboot required, same
+   as additions.** After uninstalling, "ひらがな (Nagi)" stayed listed
+   in System Settings' Input Sources with no logout/reboot; it just
+   stopped being switchable to, since its backing bundle was gone. So
+   the on-boot registry rescan additions need applies to plain
+   file-level removal too — it isn't add-only, contradicting the
+   original hypothesis below.
+2. **Active removal (the "−" button in System Settings' Input Sources
+   editor) works immediately, no reboot needed.** Manually selecting the
+   now-broken "ひらがな (Nagi)" entry and clicking "−" cleared it right
+   away. Makes sense in hindsight: that's a direct, explicit
+   deregistration call the picker makes on your behalf, not the passive
+   background rescan that only happens at boot.
+
+Net effect for `uninstall-ime.sh`: a reboot is *not* actually required to
+get back to a clean state — removing the stale entry by hand with "−"
+is enough, and is the faster path. Reboot is only a fallback if that's
+not an option for some reason.
+
+This also reframes the earlier Google 日本語入力 observation below —
+the likely explanation is that Google's uninstaller doesn't just delete
+files, it also actively deregisters the source (the same effect as
+clicking "−" by hand) before removing the bundle, which a blunt
+`rm -rf` can't replicate without doing the equivalent call itself.
+Recorded as the plausible explanation, not confirmed against Google's
+actual uninstaller code.
+
+Original hypothesis (kept for context, refined by the above): this
+reboot requirement might only apply to *additions* (a new/changed
+`TISInputSourceID` becoming selectable), because uninstalling Google
+日本語入力 made it disappear from System Settings' Input Sources list
+immediately, no logout/reboot, on the same machine where addition-side
+reboot was confirmed required (item 3 above).
 
 Full write-up, including the long list of things that turned out **not**
 to matter (code-signing identity, hardened runtime, plist format, binary

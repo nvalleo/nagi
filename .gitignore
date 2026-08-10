@@ -16,6 +16,11 @@ DerivedData/
 .swiftpm/
 Package.resolved
 
+# M4: unsigned .dmg output (scripts/build-dmg.sh, #25 install/uninstall
+# follow-up) — built locally / attached to GitHub Releases, not
+# vendored.
+.build-dmg/
+
 # Vendored Mozc protobufs (regenerated locally)
 poc/Sources/NagiMozcProto/Generated/
 poc/.mozc-proto/

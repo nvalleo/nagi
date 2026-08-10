@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- SMAppService.agent(plistName:) requires this file at
+	     Contents/Library/LaunchAgents/ inside the app bundle (see
+	     scripts/build-app.sh) — a different location from every other
+	     resource in this repo, which all land in Contents/Resources/.
+	     ConverterServiceRegistration.swift is what actually registers
+	     this at runtime; this file alone does nothing if the app never
+	     calls SMAppService.register(). -->
+	<key>Label</key>
+	<string>com.nvleo.inputmethod.nagi.Converter</string>
+	<!-- Bundle-relative, not an absolute path — SMAppService resolves
+	     this against wherever Nagi.app currently lives, so the same
+	     plist works whether that's ~/Library/Input Methods/ or
+	     /Library/Input Methods/. Confirmed against Apple Developer
+	     Forums threads on SMAppService + BundleProgram (no first-party
+	     doc page reachable at the time this was written — see #30). -->
+	<key>BundleProgram</key>
+	<string>Contents/Resources/NagiConverter.app/Contents/MacOS/NagiConverter</string>
+	<!-- On-demand, not RunAtLoad: NagiConverter should only start when
+	     something actually opens an IPC connection to it (the first
+	     keystroke through Nagi), the same on-demand launch behavior
+	     scripts/install-ime.sh's now-removed manual registration used.
+	     MozcBridge.swift's `converterServiceName` must match this key
+	     exactly (Label + ".session"). -->
+	<key>MachServices</key>
+	<dict>
+		<key>com.nvleo.inputmethod.nagi.Converter.session</key>
+		<true/>
+	</dict>
+	<key>KeepAlive</key>
+	<false/>
+</dict>
+</plist>
