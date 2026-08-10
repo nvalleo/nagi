@@ -87,6 +87,31 @@ final class NagiInputController: IMKInputController {
     /// `moveSubCandidateFocus` to render the sub-list itself.
     private var subCandidateParentOutput: Mozc_Commands_Output?
 
+    /// M4 (#19): the current ":"-triggered emoji shortcode search query
+    /// (see `EmojiShortcodeDictionary`), *not* including the leading
+    /// ":" itself — `""` right after entering the mode, appended to on
+    /// every printable keystroke. `nil` outside of shortcode search
+    /// entirely; that's the mode's own on/off switch, checked first
+    /// thing in `handle(_:client:)`. Same "entirely client-side, mozc's
+    /// session never touched" approach as `subCandidateIDs` above — this
+    /// is a client-only feature mozc's OSS build has no notion of at
+    /// all, not something being shadowed from its own session state.
+    private var shortcodeQuery: String?
+    /// `EmojiShortcodeDictionary.shared.search(shortcodeQuery)`'s result,
+    /// recomputed on every buffer change (append/backspace) — this is
+    /// what `CandidateListState.updateShortcodeCandidates` renders and
+    /// what `shortcodeFocusedIndex` indexes into.
+    private var shortcodeMatches: [String] = []
+    /// Position within `shortcodeMatches` the grid is focused on. `nil`
+    /// only when `shortcodeMatches` is empty (no match, or query still
+    /// empty) — mirrors `CandidateListState.focusedID`'s own
+    /// `hasFocusedIndex` gating.
+    private var shortcodeFocusedIndex: Int?
+    /// The ":" keystroke that enters shortcode search — `keyEvent.keyCode`
+    /// is the Unicode scalar value for any non-special key (see
+    /// MozcKeyEventMapping), so this is what a literal ":" arrives as.
+    private static let shortcodeSearchTriggerKeyCode = UnicodeScalar(":").value
+
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
         guard sessionID == nil else { return }
@@ -118,6 +143,10 @@ final class NagiInputController: IMKInputController {
         guard let client = sender as? IMKTextInput else { return false }
         guard let sessionID else { return false }
         guard let keyEvent = MozcKeyEventMapping.keyEvent(for: event) else { return false }
+
+        if shortcodeQuery != nil {
+            return handleShortcodeSearchKey(keyEvent, client: client)
+        }
 
         if subCandidateFocusedIndex != nil {
             switch keyEvent.specialKey {
@@ -155,6 +184,9 @@ final class NagiInputController: IMKInputController {
             lastOutput.candidateWindow.hasSubCandidateWindow
         {
             enterSubCandidateMode(from: lastOutput, client: client)
+            return true
+        } else if isShortcodeSearchTrigger(keyEvent) {
+            enterShortcodeSearchMode(client: client)
             return true
         }
 
@@ -259,6 +291,9 @@ final class NagiInputController: IMKInputController {
         subCandidateIDs = []
         subCandidateFocusedIndex = nil
         subCandidateParentOutput = nil
+        shortcodeQuery = nil
+        shortcodeMatches = []
+        shortcodeFocusedIndex = nil
     }
 
     /// Enters cascading sub-candidate browsing (`output.candidateWindow.
@@ -429,6 +464,255 @@ final class NagiInputController: IMKInputController {
         } else {
             candidateWindow.hide()
         }
+    }
+
+    /// True for a bare ":" keystroke while nothing is currently being
+    /// composed — the Slack/GitHub-style entry point into shortcode
+    /// search (#19). Gated on preedit being empty so ordinary Japanese
+    /// input keeps working exactly as before: a ":" typed *during*
+    /// composition still reaches mozc below and converts to the
+    /// fullwidth "：" candidate, same as always. `lastOutput` is the
+    /// only place preedit state lives client-side; no `Output` yet
+    /// (fresh session) reads the same as an empty one.
+    private func isShortcodeSearchTrigger(_ keyEvent: Mozc_Commands_KeyEvent) -> Bool {
+        guard keyEvent.hasKeyCode, keyEvent.keyCode == Self.shortcodeSearchTriggerKeyCode else { return false }
+        return lastOutput?.preedit.segment.isEmpty ?? true
+    }
+
+    /// Enters shortcode search with an empty query — nothing to match
+    /// yet, so the candidate window stays hidden until the first
+    /// character of the query itself arrives (`appendToShortcodeQuery`).
+    /// Still shows the triggering ":" itself as marked text, same as any
+    /// other keystroke in this mode — see `updateShortcodeMarkedText`.
+    private func enterShortcodeSearchMode(client: IMKTextInput) {
+        shortcodeQuery = ""
+        shortcodeMatches = []
+        shortcodeFocusedIndex = nil
+        candidateWindow.hide()
+        updateShortcodeMarkedText(client: client)
+    }
+
+    /// Routes every keystroke while shortcode search is active (i.e.
+    /// `shortcodeQuery != nil`) — mozc's session is never sent anything
+    /// here, mirroring `subCandidateIDs`'s doc comment: this is a
+    /// client-only feature, not shadowing mozc's own state.
+    private func handleShortcodeSearchKey(_ keyEvent: Mozc_Commands_KeyEvent, client: IMKTextInput) -> Bool {
+        switch keyEvent.specialKey {
+        case .enter:
+            commitShortcodeCandidate(client: client)
+            return true
+        case .tab:
+            // On an empty query, Tab browses the full emoji list instead
+            // of committing — the discoverable-picker entry point (#19
+            // follow-up). A non-empty query already has real matches to
+            // commit, so Tab there behaves exactly like Enter, matching
+            // Tab's usual "accept the suggestion" role.
+            if (shortcodeQuery ?? "").isEmpty {
+                browseAllShortcodeCandidates(client: client)
+            } else {
+                commitShortcodeCandidate(client: client)
+            }
+            return true
+        case .escape:
+            commitShortcodeQueryAsLiteralText(client: client)
+            return true
+        case .backspace:
+            deleteLastShortcodeQueryCharacter(client: client)
+            return true
+        case .left:
+            moveShortcodeFocus(by: -1, client: client)
+            return true
+        case .right:
+            moveShortcodeFocus(by: 1, client: client)
+            return true
+        case .up:
+            moveShortcodeFocus(by: -CandidateListView.gridColumnCount, client: client)
+            return true
+        case .down:
+            moveShortcodeFocus(by: CandidateListView.gridColumnCount, client: client)
+            return true
+        default:
+            break
+        }
+
+        // Printable ASCII appended to the query. `keyEvent.keyCode` is
+        // already the Unicode scalar value for anything that isn't a
+        // special key — see MozcKeyEventMapping — so this covers exactly
+        // what would otherwise have been forwarded to mozc as ordinary
+        // text input.
+        guard keyEvent.hasKeyCode, let scalar = Unicode.Scalar(keyEvent.keyCode) else {
+            // Not something shortcode search understands (a modifier-only
+            // event or similar that still made it past
+            // MozcKeyEventMapping). Swallow rather than falling through
+            // to mozc — its session was never touched while this mode is
+            // active, so there's nothing coherent to hand it mid-buffer.
+            return true
+        }
+        appendToShortcodeQuery(Character(scalar), client: client)
+        return true
+    }
+
+    private func appendToShortcodeQuery(_ character: Character, client: IMKTextInput) {
+        guard var query = shortcodeQuery else { return }
+        query.append(character)
+        shortcodeQuery = query
+        refreshShortcodeMatches(client: client)
+    }
+
+    /// Backspace on an already-empty query (i.e. right after the
+    /// triggering ":") exits the mode entirely — mirrors how deleting
+    /// past the start of an ordinary composition would end it.
+    private func deleteLastShortcodeQueryCharacter(client: IMKTextInput) {
+        guard var query = shortcodeQuery else { return }
+        guard !query.isEmpty else {
+            exitShortcodeSearchMode(client: client)
+            return
+        }
+        query.removeLast()
+        shortcodeQuery = query
+        refreshShortcodeMatches(client: client)
+    }
+
+    private func refreshShortcodeMatches(client: IMKTextInput) {
+        guard let query = shortcodeQuery else { return }
+        shortcodeMatches = EmojiShortcodeDictionary.shared.search(query)
+        shortcodeFocusedIndex = shortcodeMatches.isEmpty ? nil : 0
+        updateShortcodeMarkedText(client: client)
+        renderShortcodeCandidates(client: client)
+    }
+
+    /// Tab-on-empty-query entry point (#19 follow-up) — shows
+    /// `RecentEmojiStore`'s most-recently-committed emoji first, then
+    /// the rest of `EmojiShortcodeDictionary.allEmoji` (recents removed
+    /// from their dictionary-order position, so nothing appears twice)
+    /// for browsing instead of a filtered search result. Doesn't touch
+    /// `shortcodeQuery` itself (still `""`), so typing right after this
+    /// still filters normally via `appendToShortcodeQuery`/
+    /// `refreshShortcodeMatches`, and Enter/Escape on the still-empty
+    /// query keep committing the fullwidth "：" (see
+    /// `commitShortcodeQueryAsLiteralText`) exactly as before — this
+    /// only changes what Tab itself does.
+    private func browseAllShortcodeCandidates(client: IMKTextInput) {
+        let recents = RecentEmojiStore.shared.recentEmoji
+        let recentsSet = Set(recents)
+        let rest = EmojiShortcodeDictionary.shared.allEmoji.filter { !recentsSet.contains($0) }
+        shortcodeMatches = recents + rest
+        shortcodeFocusedIndex = shortcodeMatches.isEmpty ? nil : 0
+        renderShortcodeCandidates(client: client)
+    }
+
+    /// Shows the shortcode buffer itself — ":" plus the query typed so
+    /// far — as marked text (underlined, like ordinary preedit). Without
+    /// this the user would have no visible feedback for what they've
+    /// typed: shortcode search never touches mozc's own preedit, so
+    /// nothing about it would otherwise reach the text field at all
+    /// until a candidate is actually committed. Deliberately a plain
+    /// single-style underline, not `markedText(for:)`'s highlighted-
+    /// segment styling — there's no multi-segment concept here to
+    /// distinguish.
+    private func updateShortcodeMarkedText(client: IMKTextInput) {
+        guard let shortcodeQuery else { return }
+        let text = ":" + shortcodeQuery
+        let attributed = NSAttributedString(string: text, attributes: [.underlineStyle: NSUnderlineStyle.single.rawValue])
+        client.setMarkedText(
+            attributed,
+            selectionRange: NSRange(location: text.utf16.count, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+    }
+
+    private func renderShortcodeCandidates(client: IMKTextInput) {
+        guard !shortcodeMatches.isEmpty else {
+            candidateWindow.hide()
+            return
+        }
+        candidateWindow.showShortcodeCandidates(shortcodeMatches, focusedIndex: shortcodeFocusedIndex, belowCaret: caretRect(client: client))
+    }
+
+    /// `delta` is in flattened `shortcodeMatches` index space — ±1 for
+    /// Left/Right, ±`CandidateListView.gridColumnCount` for Up/Down, to
+    /// match how that view actually lays the grid out. Out-of-range
+    /// moves (top/bottom/either edge of the grid) are no-ops rather than
+    /// wrapping — unlike the mozc-backed sub-candidate list above, there
+    /// is no "continuous loop back to a parent list" concept here for an
+    /// edge to hand off to.
+    private func moveShortcodeFocus(by delta: Int, client: IMKTextInput) {
+        guard let index = shortcodeFocusedIndex, shortcodeMatches.indices.contains(index + delta) else { return }
+        shortcodeFocusedIndex = index + delta
+        renderShortcodeCandidates(client: client)
+    }
+
+    /// Commits the focused match as plain text via `insertText` — no
+    /// `SessionCommand` of any kind, since mozc's session was never
+    /// involved in shortcode search to begin with (see `shortcodeQuery`'s
+    /// doc comment). No separate call to clear the ":"+query marked text
+    /// first: `insertText` replaces whatever marked text is currently
+    /// showing, per `IMKTextInput`'s own contract. Records the commit in
+    /// `RecentEmojiStore` so `browseAllShortcodeCandidates` surfaces it
+    /// next time — not done in `commitShortcodeQueryAsLiteralText`,
+    /// since that path never actually selected an emoji.
+    private func commitShortcodeCandidate(client: IMKTextInput) {
+        guard let index = shortcodeFocusedIndex, shortcodeMatches.indices.contains(index) else {
+            // Enter/Tab with no match — same "keep what was typed" call
+            // as Escape (see commitShortcodeQueryAsLiteralText) rather
+            // than silently discarding it: there's nothing more useful
+            // Enter could do here, and dropping the text the user just
+            // typed would be surprising.
+            commitShortcodeQueryAsLiteralText(client: client)
+            return
+        }
+        let emoji = shortcodeMatches[index]
+        RecentEmojiStore.shared.record(emoji)
+        shortcodeQuery = nil
+        shortcodeMatches = []
+        shortcodeFocusedIndex = nil
+        candidateWindow.hide()
+        client.insertText(emoji, replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
+
+    /// Escape dismisses the candidate picker but keeps whatever was
+    /// typed, committing ":"+query as plain text — the only way to type
+    /// a literal ":" at all, since every ":" keystroke enters this mode
+    /// (see `isShortcodeSearchTrigger`). Mirrors Slack/GitHub's own
+    /// Escape behavior: it closes the suggestion popup, not the text
+    /// already typed. No separate call to clear the marked text first:
+    /// `insertText` replaces whatever marked text is currently showing,
+    /// per `IMKTextInput`'s own contract (same as `commitShortcodeCandidate`).
+    ///
+    /// A bare ":" (query still empty) becomes the fullwidth "：" —
+    /// matches what ordinary Japanese input would have produced for a
+    /// lone ":" keystroke (mozc's own conversion candidate), since a
+    /// half-width symbol reads as an odd leftover mid-Japanese-input. A
+    /// non-empty query almost always mixes in ASCII letters/digits
+    /// (that's the whole point of shortcode search), where fullwidth-
+    /// converting only the ":" would look inconsistent, so those are
+    /// left exactly as typed.
+    private func commitShortcodeQueryAsLiteralText(client: IMKTextInput) {
+        let query = shortcodeQuery ?? ""
+        let text = query.isEmpty ? "：" : ":" + query
+        shortcodeQuery = nil
+        shortcodeMatches = []
+        shortcodeFocusedIndex = nil
+        candidateWindow.hide()
+        client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
+
+    /// Backs out of shortcode search when Backspace deletes past an
+    /// already-empty query — unlike Escape above, this drops the ":"
+    /// entirely rather than committing it: it's a continuation of
+    /// "delete one more character", not a dismissal of typed text.
+    /// Clears the ":"+query marked text `updateShortcodeMarkedText` put
+    /// up, since nothing is being committed to replace it.
+    private func exitShortcodeSearchMode(client: IMKTextInput) {
+        shortcodeQuery = nil
+        shortcodeMatches = []
+        shortcodeFocusedIndex = nil
+        candidateWindow.hide()
+        client.setMarkedText(
+            "",
+            selectionRange: NSRange(location: 0, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
     }
 
     private func apply(_ output: Mozc_Commands_Output, client: IMKTextInput) {

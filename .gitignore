@@ -20,6 +20,12 @@ Package.resolved
 poc/Sources/NagiMozcProto/Generated/
 poc/.mozc-proto/
 
+# M4: emoji shortcode dictionary (#19), built from CLDR by
+# scripts/fetch-emoji-annotations.sh — not vendored, same policy as the
+# Mozc protobufs above.
+.emoji-fetch/
+app/Resources/emoji-shortcodes.json
+
 # M2b: full google/mozc checkout used to build our own mozc_server
 # (Bazel + third_party_cache can grow to several GB) — see issue #9.
 .mozc-build/
