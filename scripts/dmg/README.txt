@@ -1,32 +1,50 @@
 Nagi — install
 
-1. Drag Nagi.app onto the "Input Methods" icon in this window. macOS
-   will ask for your admin password — that's normal, /Library/Input
-   Methods/ is a system folder.
+1. Drag Nagi.app onto the "Input Methods" icon in this window.
+   macOS will ask for your admin password — that's normal and expected,
+   Input Methods is a system folder.
 
-2. First time only: macOS will likely block opening Nagi.app itself,
-   because it isn't notarized (this project has no paid Apple Developer
-   ID — see the main README for why). Either:
-     - Control-click Nagi.app in /Library/Input Methods/ > Open > Open
-       (again, in the dialog that appears), or
-     - if that doesn't offer an "Open" option, run this in Terminal:
-         xattr -cr "/Library/Input Methods/Nagi.app"
-       and try opening it again.
-   Opening it once is what registers the bundled NagiConverter — you
-   don't need to do anything else for that part.
+2. Open Nagi.app once (double-click it in /Library/Input Methods/).
+   macOS will very likely warn that it can't verify the developer —
+   that's expected too, this app isn't notarized (no paid Apple
+   Developer ID behind this project). To open it anyway:
+     - Control-click (or right-click) Nagi.app, choose "Open", then
+       click "Open" again in the dialog that appears.
+   Opening it this one time is all it takes — Nagi finishes setting
+   itself up automatically. No restart needed.
 
-3. Reboot the machine. Not log out/in — a full reboot. macOS only
-   re-scans its Input Source registry on a full boot.
+   If step 2 above doesn't offer an "Open" option (some versions of
+   macOS instead say the app "is damaged"), it's not actually damaged —
+   this is Gatekeeper being extra cautious about unnotarized apps. Open
+   Terminal (Applications > Utilities > Terminal) and paste this one
+   line, then try opening Nagi.app again:
+     xattr -cr "/Library/Input Methods/Nagi.app"
 
-4. System Settings > Keyboard > Input Sources > Edit... > "+" > find
-   "Nagi" under Japanese > Add. If Google 日本語入力, macSKK, or another
-   Mozc-based IME is also installed, there may be multiple entries named
-   "ひらがな" — check the icon to tell Nagi's apart.
+3. Open System Settings > Keyboard > Input Sources. "Nagi" should
+   already be listed under Japanese — no need to click "+". If you also
+   have Google 日本語入力, macSKK, or another Mozc-based IME installed,
+   you may see more than one entry named "ひらがな" — check the little
+   icon next to each one to tell them apart.
+   (Not showing up? Click Edit... > "+" > find "Nagi" under Japanese >
+   Add, and it'll work from there.)
 
-5. Switch to it from the menu bar Input menu. In TextEdit, type "nagi"
-   then Enter — expect "なぎ".
+4. Switch to it from the input menu in your menu bar. Try it in
+   TextEdit: type "nagi" and press Enter — it should turn into "なぎ".
 
-To uninstall: delete /Library/Input Methods/Nagi.app, or, if you have
-this project's source checked out, run
-  ./scripts/uninstall-ime.sh --system
-which also stops the running NagiConverter service.
+That's it — no restart required anywhere in this process.
+
+---
+
+Uninstall
+
+Double-click "Uninstall Nagi.app" in this window (it works from
+wherever you keep it, it doesn't need to stay next to Nagi.app). It
+asks you to confirm, then for your admin password, and then removes
+everything — the app, its background process, and its entry in Input
+Sources.
+
+One small thing it can't clean up: an empty, unlabeled row can be left
+behind under the 日本語 (Japanese) group in Input Sources. It's harmless
+and you can't accidentally switch to it — but if it bothers you, a
+restart clears it completely. The uninstaller will offer to restart for
+you; feel free to say no and do it later, whenever's convenient.

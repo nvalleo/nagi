@@ -35,7 +35,7 @@ IMKit のスケルトンをシステム設定に登録し、TextEdit にテキ�
 ./scripts/build-dmg.sh   # -> .build-dmg/Nagi-<version>.dmg
 ```
 
-意図的に「アプリのみ」であり、`.pkg`／カスタムインストーラーではない — 署名・公証済みで、アプリだけが入っていて、ユーザーが好きな場所にドラッグできる DMG というのが、大手企業のインストーラーの外側で見ると、個人／小規模チームの macOS 開発者が実際に収斂している標準だから（#30 で議論、[この r/opensource のスレッド](https://www.reddit.com/r/opensource/comments/1ku0zv0/) のご指摘に感謝 — このセクションの以前のバージョンは`.pkg`を指していた）。唯一必要な配慮: Nagi は`/Applications/`ではなく`/Library/Input Methods/`に置かれる必要があるため、DMG のドロップ先は通常の Applications エイリアスではなく、そのフォルダへのシンボリックリンクになっている。カスタムインストーラーを不要にできた理由: `Nagi.app`は初回起動時に`SMAppService`経由で自分自身の`NagiConverter` LaunchAgent を登録するようになった（`app/Sources/Nagi/ConverterServiceRegistration.swift`参照）— もはやインストーラースクリプトがそれを代行する必要はない。
+意図的に「アプリのみ」であり、`.pkg`／カスタムインストーラーではない — 署名・公証済みで、アプリだけが入っていて、ユーザーが好きな場所にドラッグできる DMG というのが、大手企業のインストーラーの外側で見ると、個人／小規模チームの macOS 開発者が実際に収斂している標準だから（#30 で議論、[この r/opensource のスレッド](https://www.reddit.com/r/opensource/comments/1ku0zv0/) のご指摘に感謝 — このセクションの以前のバージョンは`.pkg`を指していた）。唯一必要な配慮: Nagi は`/Applications/`ではなく`/Library/Input Methods/`に置かれる必要があるため、DMG のドロップ先は通常の Applications エイリアスではなく、そのフォルダへのシンボリックリンクになっている。カスタムインストーラーを不要にできた理由: `Nagi.app`は初回起動時に`SMAppService`経由で自分自身の`NagiConverter` LaunchAgent を登録するようになった（`app/Sources/Nagi/ConverterServiceRegistration.swift`参照）ほか、M4 の #30 フォローアップとして、reboot 不要で自分自身を Text Input Source として登録するようにもなった（`app/Sources/Nagi/InputSourceRegistration.swift`、下記「登録されるまで」参照）— もはやインストーラースクリプトがそのどちらも代行する必要はない。
 
 **未署名 — このリポジトリの背後に Apple Developer Program のメンバーシップ（Developer ID）は存在しないため、macOS の Gatekeeper が`Nagi.app`の初回起動をブロックする。** Nagi.app を Control-click → 開く → 開く（ダイアログでもう一度）、または初回のブロック後にシステム設定 → プライバシーとセキュリティ → 「このまま開く」。どちらも「開く」の選択肢が出ない場合（最近の macOS では代わりに「壊れている」と表示され、GUI での回避手段がないことがある — 上記スレッドでも指摘あり）、quarantine 属性を手動で剥がす: `xattr -cr "/Library/Input Methods/Nagi.app"`。このフォールバックを含む完全な手順は`scripts/dmg/README.txt`（DMG 内に同梱）にある。これは同じく個人開発の macOS IME である[SwiftyGyaim](https://github.com/tanabe1478/SwiftyGyaim) が同じ理由で行っているのと同じトレードオフ。署名・公証済み DMG（macSKK/AquaSKK/azooKey-Desktop に合わせる、いずれも#30 で調査済み）はまだ roadmap（M4）上にある — 有償の Developer ID が先に必要。
 
@@ -48,8 +48,8 @@ IMKit のスケルトンをシステム設定に登録し、TextEdit にテキ�
 
 **その後、手動で:**
 
-1. **マシンを再起動する。** ログアウト/ログインではなく、フルの再起動。これは M1 構築時に判明した最も意外な事実（下記参照）。
-2. システム設定 → キーボード → 入力ソース → 編集... → 「+」→ 日本語の下にある「Nagi」を探す → 追加。他の日本語 IME（Google 日本語入力、macSKK など）がインストールされている場合、「ひらがな」という名前のエントリが複数あることがある — モードアイコンで見分けること。
+1. **`Nagi.app`を一度起動する** — Finder でダブルクリックするか、`open "/Library/Input Methods/Nagi.app"`。これにより自己登録がトリガーされる（`app/Sources/Nagi/InputSourceRegistration.swift`、#30 フォローアップ）— **もう reboot は不要。** このドキュメントの以前のバージョンではここでフルの reboot が必要としていたが、なぜそれが必須ではなくなったかは下記「登録されるまで」を参照。
+2. システム設定 → キーボード → 入力ソース に、「+」を押さなくても既に「Nagi」が日本語の下に並んでいるはず（自己登録が直接有効化する）。他の日本語 IME（Google 日本語入力、macSKK など）がインストールされている場合、「ひらがな」という名前のエントリが複数あることがある — モードアイコンで見分けること。もし出てこない場合は、編集... → 「+」→ 日本語の下の「Nagi」を探す → 追加、にフォールバックする。
 3. メニューバーの入力メニューから切り替える。
 4. TextEdit で`nagi`と入力して Enter。
 
@@ -80,6 +80,8 @@ TextEdit で`nagi<Enter>`と入力すると「なぎ」が挿入される。**de
 1. **`release`ビルドでなければならない。** `debug`ビルドには自動生成される`com.apple.security.get-task-allow`エンタイトルメントが付く。そのエンタイトルメントを持つバイナリのバンドルは Text Input Source レジストリに絶対に追加されない — `imklaunchagent`は実行時にその XPC 接続を問題なく受け付けるため、プロセスは一見健全に見える。ただ絶対に選択可能にならないだけ。
 2. **`CFBundleIdentifier`（およびその下のすべての`TISInputSourceID`）が、リテラル文字列`.inputmethod.`を含んでいなければならない。** dev マシン上で見つかった動作実績のあるすべての IMKit バンドル — Apple 純正の`AinuIM.app`、Google 日本語入力、macSKK — で二分探索して確認済み。いずれもこのトークンを使っており、リテラル文字列`.inputmethod.`は`imklaunchagent`/HIToolbox の文字列テーブル内、`__cstring`セクションの`ComponentInputModeDict`/`TISInputSourceID`のすぐ近くに埋め込まれている。これを含まないバンドル ID は、他がどれだけ正しくても静かに無視される。これが、issue #1 で最初に挙がっていたよりシンプルな`com.nvleo.nagi`ではなく、バンドル ID が`com.nvleo.inputmethod.nagi`になった理由。
 3. **バンドル ID（またはレジストリが参照する他の値）への変更は、フルの再起動後にしか反映されない。** ログアウトしてログインし直す — よく言われる対処法で、このリポジトリの過去のドキュメントも十分としていたもの — では再走査は強制され*ない*。フルの再起動だけが効く。`imklaunchagent`/`TextInputMenuAgent`を手動で再起動しても効果はない。
+
+   **解決済み、M4（#30 フォローアップ）— 項目 3 は実は絶対的な要件ではなかった。** `imklaunchagent`/`TextInputMenuAgent`は自分自身のプロセス起動時に一度だけ Text Input Source レジストリを読み込み、その後は二度と再走査しない — これが「フルの再起動だけが効く」の正体で、reboot はこれらを含む全プロセスを再起動させるからそう見えていただけだった。`TISRegisterInputSource`/`TISEnableInputSource`は reboot なしでも実際にレジストリへ正しく書き込んでいる（確認済み: *新規の*プロセスから読み直すと変更が正しく反映されている）— この 2 つのエージェントが単に、自分自身が再起動するまでその変更を知らないだけ。`launchctl kickstart -k`はどちらに対しても SIP にブロックされる（「Operation not permitted while System Integrity Protection is engaged」）ため、上記の「手動で再起動しても効果はない」という結論はほぼ確実に誤りだった — その時の試みは実際には何も再起動できていなかった。`launchctl`を経由しない素の`kill -HUP`はこれらのプロセスを実際に終了させ、launchd が即座にオンデマンドエージェントとして再 spawn し、その際に変更を読み直す。`Nagi.app`はインストール後の初回起動時にこれと全く同じことを自分自身で行うようになった — `app/Sources/Nagi/InputSourceRegistration.swift`参照。これは Apple が公式にドキュメント化した挙動ではない。将来の macOS でこれが変わった場合、クラッシュではなく単に以前の reboot 必須の挙動に戻るだけ。
 
 以下は、調査の途中ではそれぞれ有力に見えたものの、結局は関係なかった — 誰も再度たどり着かなくて済むようここに記す: ad-hoc 署名 vs 実署名（実際に Apple Development 証明書を取得して確認したが違いはなかった）、hardened runtime、バイナリ形式 vs XML 形式の`Info.plist`、thin vs universal バイナリ、`LSBackgroundOnly`、`TISInputSourceID`が`ComponentInputModeDict`の辞書キーと一致しているか異なっているか、アイコンファイルの有無、`InputMethodServerDataSourceClass`/`DelegateClass`の有無。
 

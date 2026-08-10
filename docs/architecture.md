@@ -132,6 +132,33 @@ a downloaded macSKK release). Three silent requirements came out of it:
    after a full reboot**, not a log out/in — the commonly-cited advice —
    and not by restarting `imklaunchagent`/`TextInputMenuAgent` by hand.
 
+**Resolved, M4 (#30 follow-up) — item 3 turned out not to be a hard
+requirement.** `imklaunchagent` and `TextInputMenuAgent` cache their view
+of the Text Input Source registry once, at their own process startup, and
+never rescan it afterwards — that's the actual mechanism behind "only a
+full reboot works": a reboot is simply what restarts them along with
+everything else. `TISRegisterInputSource`/`TISEnableInputSource` do
+correctly write through to the underlying registry without a reboot
+(verified: a *fresh* process reads the change back correctly); the two
+agents just don't know about it until *they* restart. `launchctl
+kickstart -k` on either is blocked by SIP ("Operation not permitted while
+System Integrity Protection is engaged"), which is almost certainly why
+the "restarting by hand doesn't help" claim above was wrong — that
+earlier attempt never actually restarted anything, SIP silently ate it. A
+plain `kill -HUP` (not going through `launchctl`) does terminate them,
+and launchd immediately respawns both as on-demand agents, which pick up
+the change on the way back up. `Nagi.app` now does exactly this itself —
+`TISRegisterInputSource` + `TISEnableInputSource` (parent bundle, then
+the `Hiragana` mode — a mode can only flip disabled → enabled once its
+parent already is, per `kTISPropertyInputSourceIsEnableCapable`'s
+discussion in `TextInputSources.h`), followed by `kill -HUP` on both
+agents *only* when that actually changed something, i.e. only once, not
+on every launch. See `app/Sources/Nagi/InputSourceRegistration.swift`.
+None of this is documented Apple behavior — if a future macOS version
+changes it, this degrades back to the old reboot-required behavior
+(`enable()` in that file is already unconditionally best-effort), not a
+crash.
+
 **Removal, tested and confirmed end-to-end, M4 (#30 install/uninstall
 follow-up), superseding the hypothesis below.** Full cycle tested on the
 dev machine: install → reboot → add "ひらがな (Nagi)" in System

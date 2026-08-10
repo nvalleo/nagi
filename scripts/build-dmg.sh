@@ -30,6 +30,11 @@
 # scripts/install-ime.sh's per-user default remains available for
 # anyone building from source instead.)
 #
+# Also bundles "Uninstall Nagi.app" (#30 follow-up, see
+# build-uninstaller.sh) — a double-clickable uninstaller for the same
+# audience this DMG targets: people without a Terminal, who can't run
+# scripts/uninstall-ime.sh themselves.
+#
 # Usage: build-dmg.sh
 #
 # Produces .build-dmg/Nagi-<version>.dmg. Rebuilds Nagi.app first (same
@@ -42,8 +47,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DMG_RESOURCES="$SCRIPT_DIR/dmg"
 
 "$SCRIPT_DIR/build-app.sh" release
+"$SCRIPT_DIR/build-uninstaller.sh"
 
 APP_BUNDLE="$REPO_ROOT/.build-app/Nagi.app"
+UNINSTALLER_APP="$REPO_ROOT/.build-app/Uninstall Nagi.app"
 VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_BUNDLE/Contents/Info.plist")"
 
 OUT_DIR="$REPO_ROOT/.build-dmg"
@@ -54,6 +61,7 @@ echo "Staging DMG contents ..."
 STAGING="$WORK_DIR/staging"
 mkdir -p "$STAGING"
 cp -R "$APP_BUNDLE" "$STAGING/Nagi.app"
+cp -R "$UNINSTALLER_APP" "$STAGING/Uninstall Nagi.app"
 ln -s "/Library/Input Methods" "$STAGING/Input Methods"
 cp "$DMG_RESOURCES/README.txt" "$STAGING/README.txt"
 

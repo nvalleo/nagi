@@ -34,6 +34,10 @@ app.setActivationPolicy(.accessory)
 // this late.
 DispatchQueue.main.async {
     ConverterServiceRegistration.registerIfNeeded()
+    // Companion self-registration for the Text Input Source itself (as
+    // opposed to the NagiConverter LaunchAgent above) — see
+    // InputSourceRegistration.swift for why and its open questions.
+    InputSourceRegistration.registerIfNeeded()
 }
 
 app.run()

@@ -81,8 +81,11 @@ target is a symlink to that folder instead of the usual Applications
 alias. What made dropping the custom installer possible at all: Nagi.app
 now registers its own `NagiConverter` LaunchAgent via `SMAppService` the
 first time it runs (see
-`app/Sources/Nagi/ConverterServiceRegistration.swift`) — no installer
-script needs to do that on its behalf anymore.
+`app/Sources/Nagi/ConverterServiceRegistration.swift`), and — as of the
+M4 #30 follow-up — also registers itself as a Text Input Source without
+needing a reboot (`app/Sources/Nagi/InputSourceRegistration.swift`, see
+"Getting registered" below) — no installer script needs to do either on
+its behalf anymore.
 
 **Unsigned — there is no Apple Developer Program membership (Developer
 ID) behind this repo, so macOS's Gatekeeper will block the first open of
@@ -108,12 +111,18 @@ just needs a paid Developer ID first.
 
 **Then, manually:**
 
-1. **Reboot the machine.** Not log out/in — a full reboot. This is the
-   single most surprising thing learned building M1 (see below).
-2. System Settings → Keyboard → Input Sources → Edit... → "+" → find
-   "Nagi" under Japanese → Add. If other Japanese IMEs are installed
-   (Google Japanese Input, macSKK, ...), there may be multiple entries
-   named "ひらがな" — check the mode icon to tell Nagi's apart.
+1. **Launch `Nagi.app` once** — double-click it in Finder, or `open
+   "/Library/Input Methods/Nagi.app"`. This triggers self-registration
+   (`app/Sources/Nagi/InputSourceRegistration.swift`, #30 follow-up) —
+   **no reboot needed anymore.** Earlier versions of this doc said a full
+   reboot was required here; see "Getting registered" below for why that
+   turned out not to be a hard requirement after all.
+2. System Settings → Keyboard → Input Sources → "Nagi" should already be
+   listed under Japanese, no "+" needed (self-registration enables it
+   directly). If other Japanese IMEs are installed (Google Japanese
+   Input, macSKK, ...), there may be multiple entries named "ひらがな" —
+   check the mode icon to tell Nagi's apart. If it's missing, fall back
+   to Edit... → "+" → find "Nagi" under Japanese → Add.
 3. Switch to it from the menu bar Input menu.
 4. In TextEdit, type `nagi` then Enter.
 
@@ -188,6 +197,27 @@ error from any tool. If this breaks again, check these in order:
    docs claimed was sufficient — does *not* force a re-scan. Only a full
    boot does. Restarting `imklaunchagent`/`TextInputMenuAgent` by hand
    doesn't help either.
+
+   **Resolved, M4 (#30 follow-up) — item 3 turned out not to be a hard
+   requirement.** `imklaunchagent`/`TextInputMenuAgent` cache the Text
+   Input Source registry once, at their own process startup, and never
+   rescan it afterwards — that's the actual mechanism behind "only a
+   full reboot works", since a reboot is what restarts them along with
+   everything else. `TISRegisterInputSource`/`TISEnableInputSource` do
+   correctly write through to the underlying registry even without a
+   reboot (confirmed: a *fresh* process reads the change back
+   correctly) — the two agents just don't know about it until *they*
+   restart. `launchctl kickstart -k` on either is blocked by SIP
+   ("Operation not permitted while System Integrity Protection is
+   engaged"), which is almost certainly why the "restarting by hand
+   doesn't help" claim above was wrong — that earlier attempt never
+   actually restarted anything. A plain `kill -HUP` (not going through
+   `launchctl`) does terminate them, and launchd immediately respawns
+   both as on-demand agents, which do pick up the change. Nagi.app now
+   does exactly this itself on first launch after install — see
+   `app/Sources/Nagi/InputSourceRegistration.swift`. None of this is
+   documented Apple behavior; if a future macOS version changes it, this
+   degrades back to the old reboot-required behavior, not a crash.
 
 None of the following turned out to matter, despite each looking
 plausible mid-investigation — noted here so nobody re-derives them:
