@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="README-JP.md">日本語</a> ・ English
+  <a href="README-JP.md">🇯🇵 日本語</a> ・ 🇺🇸 English
 </p>
 
 <p align="center">
@@ -44,22 +44,21 @@ are aiming for: light, quiet, predictable.
 
 ## Why another Japanese IME
 
-There are three neighbouring products worth naming, because `nagi` is
-deliberately none of them:
+There is one product worth naming directly, because `nagi` exists
+specifically to be a different frontend for it: **Google 日本語入力**, the
+official Mozc-based IME on macOS. `nagi` runs the exact same conversion
+engine — Mozc — so the difference is entirely in the surface:
 
-| | Google 日本語入力 (official) | azooKey / Zenzai | **nagi** |
-|---|---|---|---|
-| Conversion | Mozc | Neural (Zenzai) | Mozc (bundled) |
-| Candidate UI | Legacy (~2010) | Modern, SwiftUI | Modern, SwiftUI |
-| Extra install | — | — | none |
-| Predictability | High | Neural / variable | High |
-| Memory | Low | Higher (model resident) | Low |
-| Target user | Anyone | Users who want AI-flavoured input | Anyone who wants the classic Mozc feel with a modern UI |
+| | Google 日本語入力 (official) | **nagi** |
+|---|---|---|
+| Conversion | Mozc | Mozc (bundled) |
+| Candidate UI | Legacy (~2010) | Modern, SwiftUI |
+| Extra install | — | none |
+| Predictability | High | High |
+| Memory | Low | Low |
 
-`nagi` sits in the empty quadrant: **Mozc quality, modern UI, self-contained,
-predictable.** It is not trying to be smarter than the engine — the engine is
-already good. It is trying to be the frontend the engine has been missing on
-macOS.
+`nagi` is not trying to be smarter than the engine — the engine is already
+good. It is trying to be the frontend Mozc has been missing on macOS.
 
 ## Non-goals
 
