@@ -8,6 +8,13 @@
 	<string>Nagi</string>
 	<key>CFBundleExecutable</key>
 	<string>Nagi</string>
+	<!-- #25: Dock/Finder icon. Generated from scripts/icons/ (see
+	     scripts/build-icons.sh) — .icns referenced without its extension
+	     is the more common convention, but modern Xcode-generated
+	     Info.plists include it and both are documented as valid, so kept
+	     explicit here for clarity. -->
+	<key>CFBundleIconFile</key>
+	<string>Nagi.icns</string>
 	<key>CFBundleIdentifier</key>
 	<!-- Draft bundle ID from issue #1 — not finalized. Must contain the
 	     literal substring ".inputmethod." — confirmed by bisecting
