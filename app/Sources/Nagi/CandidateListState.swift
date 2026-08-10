@@ -87,6 +87,23 @@ final class CandidateListState: ObservableObject {
         update(rawCandidates: subCandidates, focusedIndex: focusedIndex, subCandidateIndicatorIndex: nil)
     }
 
+    /// M4 (#19): renders `:`-triggered shortcode search results — see
+    /// EmojiShortcodeDictionary and NagiInputController's shortcode-mode
+    /// handling. Not backed by any mozc `Output`, so there's no
+    /// `Candidate.index`/`.id` to reuse; the array position itself is a
+    /// fine stand-in since this list is always rebuilt from scratch on
+    /// every buffer change. Always `isPictograph: true` so
+    /// `CandidateListView` renders it with the same grid layout M3d
+    /// (#16) built for mozc's own emoji/kaomoji candidates, and never
+    /// `hasSubCandidates` — a shortcode match is a plain emoji, nothing
+    /// cascades from it.
+    func updateShortcodeCandidates(_ emoji: [String], focusedIndex: Int?) {
+        candidates = emoji.enumerated().map { index, text in
+            Candidate(id: index, text: text, isPictograph: true, hasSubCandidates: false)
+        }
+        focusedID = focusedIndex
+    }
+
     private func update(rawCandidates: [Mozc_Commands_CandidateWindow.Candidate], focusedIndex: Int?, subCandidateIndicatorIndex: Int?) {
         candidates = rawCandidates.map {
             Candidate(

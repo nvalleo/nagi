@@ -69,6 +69,16 @@ if [ ! -d "$MOZC_SERVER_APP" ]; then
   exit 1
 fi
 
+# M4: ":"-triggered emoji shortcode search (#19) reads its keyword data
+# from a JSON file built from CLDR — not vendored into git, same as
+# NagiMozcProto's generated Swift above.
+EMOJI_SHORTCODES="$APP_DIR/Resources/emoji-shortcodes.json"
+if [ ! -f "$EMOJI_SHORTCODES" ]; then
+  echo "error: $EMOJI_SHORTCODES is missing." >&2
+  echo "  Run ./scripts/fetch-emoji-annotations.sh first (see #19)." >&2
+  exit 1
+fi
+
 CONFIGURATION="${1:-release}"
 case "$CONFIGURATION" in
   debug)
@@ -119,6 +129,7 @@ if [ -f "$APP_DIR/Resources/InfoPlist.strings" ]; then
   # file, which follows the same CFBundleName + per-mode-ID pattern).
   cp "$APP_DIR/Resources/InfoPlist.strings" "$BUNDLE/Contents/Resources/"
 fi
+cp "$EMOJI_SHORTCODES" "$BUNDLE/Contents/Resources/"
 
 echo "Bundling NagiConverter.app (mozc_server) ..."
 cp -R "$MOZC_SERVER_APP" "$BUNDLE/Contents/Resources/NagiConverter.app"

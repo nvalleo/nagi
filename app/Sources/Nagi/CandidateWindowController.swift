@@ -72,6 +72,18 @@ final class CandidateWindowController {
         reposition(belowCaret: caretRect)
     }
 
+    /// M4 (#19): shows `:`-triggered emoji shortcode search results —
+    /// see CandidateListState.updateShortcodeCandidates. `focusedIndex`
+    /// is nil only when the search matched nothing; callers should
+    /// prefer `hide()` in that case (matches how `apply(_:client:)`
+    /// treats an empty mozc candidate list) rather than showing an empty
+    /// panel.
+    func showShortcodeCandidates(_ emoji: [String], focusedIndex: Int?, belowCaret caretRect: NSRect) {
+        state.updateShortcodeCandidates(emoji, focusedIndex: focusedIndex)
+        announceFocusChange(hasSubmenu: false, isSubCandidateContext: false)
+        reposition(belowCaret: caretRect)
+    }
+
     private var lastAnnouncedCandidateID: Int?
     private var lastAnnouncedWasSubCandidateContext = false
 

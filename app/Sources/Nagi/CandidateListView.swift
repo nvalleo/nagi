@@ -62,7 +62,13 @@ struct CandidateListView: View {
     /// see `CandidateListState`) render as fixed-size grid cells instead
     /// of full-width rows — a `9`-wide grid of 26pt glyphs reads far
     /// better than a scroll of one-per-line rows.
-    private static let gridColumnCount = 9
+    ///
+    /// Not `private`: M4's shortcode search (#19, NagiInputController)
+    /// reuses this same grid for its own results and needs the same
+    /// column count to compute Up/Down as "±one grid row" the way this
+    /// view lays them out — see NagiInputController's
+    /// `moveShortcodeFocus`.
+    static let gridColumnCount = 9
     private static let gridCellSize: CGFloat = 26
     private static let gridRowHeight: CGFloat = gridCellSize + 4 // cell + vertical padding
 
