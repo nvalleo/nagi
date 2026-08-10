@@ -25,6 +25,7 @@
 
 - [nagi とは](#nagi-とは)
 - [インストール](#インストール)
+- [アンインストール](#アンインストール)
 - [なぜまた日本語 IME を作るのか](#なぜまた日本語-ime-を作るのか)
 - [やらないこと](#やらないこと)
 - [アーキテクチャ概観](#アーキテクチャ概観)
@@ -45,23 +46,32 @@
 
 ## インストール
 
-まだ GitHub Release は切られていません（`nagi` は pre-alpha です）—
-現時点ではソースからビルドするのが唯一の方法です。フルの手順は
-[`app/README.md`](app/README.md)（英語）参照。概要:
+[最新の Release](https://github.com/nv-leo/nagi/releases/latest) から
+`Nagi-<version>.dmg`をダウンロードして開き、中の`Input Methods`
+エイリアスに`Nagi.app`をドラッグしてください。`Nagi.app`を一度だけ
+開く（macOS が「開発元を確認できません」と警告しますが、
+Control-click → 開く、で通ります）— これで準備完了です。システム設定 >
+キーボード > 入力ソースに出てくるまでに再起動は不要です。`nagi`は
+pre-alpha で未署名・未公証（有償の Apple Developer ID がまだないため）
+— `.dmg`内の`README.txt`に、macOS がより頑固に開くのを拒む場合の
+対処法も含めたフルの手順があります。
 
-```sh
-./scripts/build-dmg.sh   # -> .build-dmg/Nagi-<version>.dmg
-```
+自分でビルドしたい場合は、[`app/README.md`](app/README.md)（英語）に
+ソースからのビルド手順があります（`./scripts/build-dmg.sh`で同じ
+`.dmg`が作れます）。
 
-その後、`.dmg`内の`Input Methods`エイリアスに`Nagi.app`をドラッグし、
-一度だけ開く（macOS が「開発元を確認できません」と警告しますが、
-Control-click → 開く、で通ります）。これで準備完了 — システム設定 >
-キーボード > 入力ソースに出てくるまでに再起動は不要です。あとで
-削除したい場合は、同じ`.dmg`に入っている`Uninstall Nagi.app`を
-ダブルクリックしてください。
+## アンインストール
 
-Release が切られたら、このセクションはビルド済み`.dmg`への直接リンクに
-差し替える予定です。
+インストール時と同じ`.dmg`に入っている`Uninstall Nagi.app`を
+ダブルクリックしてください。確認と管理者パスワードの入力の後、
+Nagi 本体・バックグラウンドプロセス・入力ソースのエントリまで
+まとめて削除します — Terminal は不要です。「日本語」の下に空欄の
+行が残ることがありますが実害はなく、アンインストーラーが
+再起動を提案します（強制ではありません）。
+
+ソースからビルドした場合は、`./scripts/uninstall-ime.sh --system`
+でファイル・プロセスの削除ができます。詳細は
+[`app/README.md`](app/README.md)（英語）参照。
 
 ## なぜまた日本語 IME を作るのか
 

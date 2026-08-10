@@ -25,6 +25,7 @@
 
 - [What it is](#what-it-is)
 - [Install](#install)
+- [Uninstall](#uninstall)
 - [Why another Japanese IME](#why-another-japanese-ime)
 - [Non-goals](#non-goals)
 - [Architecture at a glance](#architecture-at-a-glance)
@@ -45,23 +46,32 @@ are aiming for: light, quiet, predictable.
 
 ## Install
 
-No GitHub Release has been cut yet (`nagi` is pre-alpha) — for now,
-building from source is the only option. See
-[`app/README.md`](app/README.md) for the full build/install steps; the
-gist:
-
-```sh
-./scripts/build-dmg.sh   # -> .build-dmg/Nagi-<version>.dmg
-```
-
-then drag `Nagi.app` onto the `Input Methods` alias inside the `.dmg`,
-open it once (macOS will warn it's from an unidentified developer —
+Download `Nagi-<version>.dmg` from the
+[latest release](https://github.com/nv-leo/nagi/releases/latest), open
+it, and drag `Nagi.app` onto the `Input Methods` alias inside. Open
+`Nagi.app` once (macOS will warn it's from an unidentified developer —
 Control-click > Open handles that), and it's ready: no reboot needed to
-show up under System Settings > Keyboard > Input Sources. To remove it
-later, double-click the `Uninstall Nagi.app` bundled in the same `.dmg`.
+show up under System Settings > Keyboard > Input Sources. `nagi` is
+pre-alpha and unsigned/unnotarized (no paid Apple Developer ID yet) —
+the `.dmg`'s own `README.txt` has the full walkthrough, including what
+to do if macOS is extra stubborn about opening it.
 
-Once a Release exists, this section will point at the prebuilt `.dmg`
-directly instead.
+Prefer building it yourself instead? See [`app/README.md`](app/README.md)
+for the full build-from-source steps
+(`./scripts/build-dmg.sh` produces the same `.dmg`).
+
+## Uninstall
+
+Double-click `Uninstall Nagi.app`, bundled in the same `.dmg` you
+installed from. It asks for confirmation and your admin password, then
+removes Nagi, stops its background process, and clears its entry from
+Input Sources — no Terminal needed. An empty, unlabeled row can be left
+behind under the 日本語 (Japanese) group afterwards; it's harmless, and
+the uninstaller offers (but doesn't force) a restart to clear it.
+
+Built from source instead? `./scripts/uninstall-ime.sh --system` does
+the file/process cleanup part — see [`app/README.md`](app/README.md)
+for the rest.
 
 ## Why another Japanese IME
 
