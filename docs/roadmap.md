@@ -98,27 +98,57 @@ If we miss 16 ms and can't recover it by profiling, we branch off M2.5 to
 port the candidate view from SwiftUI to AppKit + `CAMetalLayer`. Decision
 point at the end of M2, not before.
 
-## M3 — Modern interaction (3–4 weeks)
+## M3 — Modern interaction (3–4 weeks) — done, one item descoped
 
 The "why does this exist" milestone. This is where nagi has to stop looking
 like Mozc-with-nicer-colours and start feeling like it was designed after
 2015.
 
-- Selection highlight animates via spring, not step-change.
-- Vertical scroll for long candidate lists, `ScrollViewReader` keeps the
-  selection in view.
-- Grid layout mode for emoji / kaomoji.
-- Preview pane showing reading and meaning for the selected candidate.
+- **M3a — done, [#13](https://github.com/nv-leo/nagi/issues/13).** Selection
+  highlight animates via spring, not step-change.
+- **M3b — done, [#14](https://github.com/nv-leo/nagi/issues/14).** Vertical
+  scroll for long candidate lists, `ScrollViewReader` keeps the selection in
+  view.
+- **M3c — descoped, [#15](https://github.com/nv-leo/nagi/issues/15).**
+  Preview pane showing reading and meaning for the selected candidate.
+  Investigated and closed without implementation: the OSS `google/mozc`
+  build's usage dictionary (`usages`/`informationID`) is always empty —
+  that data lives in a Google-internal dataset not shipped in the public
+  source — so there is no "meaning/example" content to show. Revisit only
+  if nagi ever bundles its own usage data (would be an M4+-scale effort).
+- **M3d — done, [#16](https://github.com/nv-leo/nagi/issues/16).** Grid
+  layout mode for emoji / kaomoji. Three dogfooding follow-ups found and
+  fixed after merging: highlight getting stuck on a fixed candidate index
+  for up to a page's worth of keystrokes
+  ([#21](https://github.com/nv-leo/nagi/issues/21), a `mozc_server`
+  `focusedIndex` hold-then-wrap behavior, not a nagi bug, but needed
+  client-side detection to skip past), cascading "そのほかの文字種"
+  sub-candidate windows being unselectable from the keyboard
+  ([#22](https://github.com/nv-leo/nagi/issues/22), `SELECT_CANDIDATE` +
+  `SUBMIT` is the only entry point mozc's protocol exposes for those), and
+  the candidate window never being announced to VoiceOver since it
+  intentionally never becomes key window
+  ([#23](https://github.com/nv-leo/nagi/issues/23), fixed via
+  `.announcementRequested`).
 
 **Exit criterion:** internal dogfooding for a full workday without falling
-back to Kotoeri.
+back to Kotoeri. **Not formally tracked/confirmed** — dogfooding has been
+ongoing throughout M3 (that's how #21/#22/#23 above were found) but no
+single full-workday session has been explicitly logged as a pass.
 
 ## M4 — Extras & polish (open-ended)
 
 The scope beyond M3 depends on how M0–M3 landed. Candidates:
 
 - Local history UI (recent commits, per-app).
-- Emoji panel with search.
+- Emoji panel with search — **first slice done,
+  [#19](https://github.com/nv-leo/nagi/issues/19).** `:`-triggered emoji
+  shortcode search (Slack/GitHub style): typing `:` starts narrowing emoji
+  by name as you keep typing.
+- App icon design — **open, [#25](https://github.com/nv-leo/nagi/issues/25).**
+  Menu bar icon (`app/Resources/icons/nagi.tiff`) is still a generic
+  placeholder; `Nagi.app` also has no `.icns`/`CFBundleIconFile` yet, so
+  Dock/Finder show a generic app icon too.
 - Optional LLM-backed suggestions via a local endpoint (keeping the
   no-network-by-default promise).
 - Preferences pane (`mozc_tool`-style, but native).
