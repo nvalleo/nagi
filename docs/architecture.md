@@ -95,17 +95,29 @@ a downloaded macSKK release). Three silent requirements came out of it:
    after a full reboot**, not a log out/in — the commonly-cited advice —
    and not by restarting `imklaunchagent`/`TextInputMenuAgent` by hand.
 
-Unverified hypothesis, noted during M2b: this reboot requirement may only
+**Removal needs a reboot too — tested and confirmed, M4 (#25 install/
+uninstall follow-up), superseding the hypothesis below.** Running
+`scripts/uninstall-ime.sh` (a plain `rm -rf` of `Nagi.app` plus tearing
+down the `NagiConverter` LaunchAgent) left "ひらがな (Nagi)" still listed
+in System Settings' Input Sources — just no longer switchable to, since
+its backing bundle is gone. No logout/reboot cleared it on its own during
+testing. So the registry rescan that additions need applies to plain
+file-level removal too; it isn't add-only.
+
+That's *not* inconsistent with the earlier Google 日本語入力 observation
+below — the likely explanation is that Google's uninstaller doesn't just
+delete files, it also calls into TIS to actively deregister the source
+before removing the bundle, which a blunt `rm -rf` can't replicate
+without the same (probably private) API. Recorded here as the plausible
+explanation, not confirmed against Google's actual uninstaller code.
+
+Original hypothesis (kept for context, now refuted for nagi's own
+plain-file-deletion uninstall path): this reboot requirement might only
 apply to *additions* (a new/changed `TISInputSourceID` becoming
-selectable). *Removal* looks different — uninstalling Google 日本語入力
-made it disappear from System Settings' Input Sources list immediately,
-no logout/reboot, on the same machine where addition-side reboot was
-confirmed required (item 3 above). Plausible explanation: the picker
-checks whether a listed source's backing `.app` still exists at render
-time, which doesn't need the same on-boot directory rescan that noticing
-a *new* bundle apparently does — but this is a guess, not verified
-against source or repeated testing. Flagging here rather than treating it
-as confirmed.
+selectable), because uninstalling Google 日本語入力 made it disappear
+from System Settings' Input Sources list immediately, no logout/reboot,
+on the same machine where addition-side reboot was confirmed required
+(item 3 above).
 
 Full write-up, including the long list of things that turned out **not**
 to matter (code-signing identity, hardened runtime, plist format, binary

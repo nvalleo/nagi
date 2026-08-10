@@ -72,6 +72,26 @@ real identity instead — not required, ad-hoc works fine).
 3. Switch to it from the menu bar Input menu.
 4. In TextEdit, type `nagi` then Enter.
 
+## Uninstall
+
+```sh
+./scripts/uninstall-ime.sh                  # ~/Library/Input Methods/
+./scripts/uninstall-ime.sh --system         # /Library/Input Methods/ (sudo)
+./scripts/uninstall-ime.sh --all            # both
+```
+
+Removes `Nagi.app` and stops/deregisters the `NagiConverter` LaunchAgent.
+Didn't exist until #25's install/uninstall follow-up — `install-ime.sh`
+had no counterpart before that.
+
+**Confirmed (#25): removal needs a reboot too, same as installing does.**
+"ひらがな (Nagi)" stays listed in System Settings' Input Sources after
+running this — just no longer switchable to, since its backing bundle is
+gone. Try removing the stale entry by hand with the "−" button first; if
+that doesn't work, reboot. See docs/architecture.md's "Mozc IPC" section
+for why this differs from Google 日本語入力's own uninstaller, which
+clears its entry immediately.
+
 ## Exit criterion
 
 Typing `nagi<Enter>` in TextEdit inserts `なぎ`. **Confirmed working on
