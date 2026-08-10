@@ -19,4 +19,21 @@ let server = IMKServer(name: connectionName, bundleIdentifier: bundle.bundleIden
 
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
+
+// #30: self-register the bundled NagiConverter as a LaunchAgent instead
+// of relying on an external install script/installer to do it — see
+// ConverterServiceRegistration.swift. Deferred via `DispatchQueue.main.async`
+// (runs once `app.run()`'s run loop is actually spinning) rather than
+// called inline above — calling it before NSApplication had a running
+// run loop is what made ConverterServiceRegistration's
+// UNUserNotificationCenter authorization request unreliable during
+// testing (silently never called back, or errored with "Notifications
+// are not allowed for this application" despite the toggle being on in
+// System Settings). SMAppService's own `.register()` doesn't need this —
+// only the notification half did — but there's no harm running both
+// this late.
+DispatchQueue.main.async {
+    ConverterServiceRegistration.registerIfNeeded()
+}
+
 app.run()

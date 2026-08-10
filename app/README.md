@@ -1,3 +1,5 @@
+🇺🇸 English ・ [🇯🇵 日本語](README-JP.md)
+
 # app — M1: empty IME with committing text
 
 Get the IMKit skeleton into System Settings and let it write text into
@@ -54,7 +56,50 @@ Produces `.build-app/Nagi.app` (ad-hoc signed by default; set
 `CODESIGN_IDENTITY` to a `security find-identity` hash to sign with a
 real identity instead — not required, ad-hoc works fine).
 
-## Install
+## Prebuilt download (.dmg)
+
+For trying Nagi out without a full dev environment (Xcode, Bazel, ... —
+see "Build" above): `scripts/build-dmg.sh` packages a built `Nagi.app`
+into a plain drag-and-drop `.dmg` — just the app, no installer package.
+Not yet attached to a GitHub Release (no release has been cut), so for
+now this still means building it locally first:
+
+```sh
+./scripts/build-dmg.sh   # -> .build-dmg/Nagi-<version>.dmg
+```
+
+Deliberately just the app, not a `.pkg`/custom installer — a signed and
+notarized DMG containing nothing but the app, that the user drags
+wherever they want, is what solo/small-team macOS developers converge on
+as the actual standard once you look past the big corporate installers
+(discussed on #30, credit to
+[this r/opensource thread](https://www.reddit.com/r/opensource/comments/1ku0zv0/)
+for the correction — an earlier version of this section pointed at a
+`.pkg` instead). The one accommodation still needed: Nagi has to land in
+`/Library/Input Methods/`, not `/Applications/`, so the DMG's drop
+target is a symlink to that folder instead of the usual Applications
+alias. What made dropping the custom installer possible at all: Nagi.app
+now registers its own `NagiConverter` LaunchAgent via `SMAppService` the
+first time it runs (see
+`app/Sources/Nagi/ConverterServiceRegistration.swift`) — no installer
+script needs to do that on its behalf anymore.
+
+**Unsigned — there is no Apple Developer Program membership (Developer
+ID) behind this repo, so macOS's Gatekeeper will block the first open of
+Nagi.app.** Control-click Nagi.app → Open → Open (again, in the dialog),
+or System Settings → Privacy & Security → "Open Anyway" after the first
+blocked attempt. If neither offers an "Open" option (recent macOS
+sometimes shows "is damaged" instead, with no GUI bypass — also raised
+in the thread linked above), strip the quarantine attribute by hand:
+`xattr -cr "/Library/Input Methods/Nagi.app"`. Full steps, including
+this fallback, are in `scripts/dmg/README.txt`, bundled inside the DMG
+itself. This is the same tradeoff another solo-dev macOS IME,
+[SwiftyGyaim](https://github.com/tanabe1478/SwiftyGyaim), makes for the
+same reason. A signed and notarized DMG (matching macSKK/AquaSKK/
+azooKey-Desktop, all surveyed on #30) is still on the roadmap (M4) — it
+just needs a paid Developer ID first.
+
+## Install (from source)
 
 ```sh
 ./scripts/install-ime.sh                  # ~/Library/Input Methods/
@@ -80,17 +125,32 @@ real identity instead — not required, ad-hoc works fine).
 ./scripts/uninstall-ime.sh --all            # both
 ```
 
-Removes `Nagi.app` and stops/deregisters the `NagiConverter` LaunchAgent.
-Didn't exist until #25's install/uninstall follow-up — `install-ime.sh`
-had no counterpart before that.
+Installed via the `.dmg` above? That's `/Library/Input Methods/`, so use
+`--system`.
 
-**Confirmed (#25): removal needs a reboot too, same as installing does.**
-"ひらがな (Nagi)" stays listed in System Settings' Input Sources after
-running this — just no longer switchable to, since its backing bundle is
-gone. Try removing the stale entry by hand with the "−" button first; if
-that doesn't work, reboot. See docs/architecture.md's "Mozc IPC" section
-for why this differs from Google 日本語入力's own uninstaller, which
-clears its entry immediately.
+Removes `Nagi.app` and stops the `NagiConverter` LaunchAgent. Didn't
+exist until #30's install/uninstall follow-up — `install-ime.sh` had no
+counterpart before that.
+
+**Confirmed (#30): no reboot needed, but a manual step is.** "ひらがな
+(Nagi)" stays listed in System Settings' Input Sources after running
+this — it won't disappear on its own without a reboot — but it also
+stops being switchable to, since its backing bundle is gone. Clear it
+immediately (no reboot) via System Settings > Keyboard > Input Sources >
+Edit... > select "ひらがな (Nagi)" > "−". See docs/architecture.md's
+"Mozc IPC" section for the full test and why this differs from Google
+日本語入力's own uninstaller, which clears its entry without that manual
+step.
+
+**Untested (#30): `NagiConverter` may similarly linger in System
+Settings > General > Login Items.** Since it's registered via
+`SMAppService` from inside the app rather than a plist this script
+writes, there's no file left to delete that cleanup — this script can
+only `launchctl bootout` the running job, not call the equivalent of
+`SMAppService.unregister()`. If a stale "Nagi" entry shows up there
+after uninstalling, removing it by hand (same "−"/right-click gesture as
+Input Sources above) is the expected fix; not yet verified against a
+real reinstall/uninstall cycle.
 
 ## Exit criterion
 

@@ -94,45 +94,9 @@ $SUDO cp -R "$SRC" "$DEST"
 $SUDO xattr -cr "$DEST"
 $SUDO touch "$DEST"
 
-# M2b: register the bundled NagiConverter as a launchd Mach service. This
-# is a per-user LaunchAgent regardless of --system — Program can point at
-# a system-wide path fine (Google's own installer does exactly this for
-# its own Converter service). Re-bootstrap on every install so a changed
-# $DEST (e.g. switching --system on/off) is picked up; bootout first
-# since bootstrap errors on an already-loaded label instead of replacing
-# it.
-CONVERTER_LABEL="com.nvleo.inputmethod.nagi.Converter"
-CONVERTER_PLIST="$HOME/Library/LaunchAgents/$CONVERTER_LABEL.plist"
-CONVERTER_PROGRAM="$DEST/Contents/Resources/NagiConverter.app/Contents/MacOS/NagiConverter"
-
-echo "Registering $CONVERTER_LABEL ..."
-mkdir -p "$HOME/Library/LaunchAgents"
-cat > "$CONVERTER_PLIST" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>Program</key>
-	<string>$CONVERTER_PROGRAM</string>
-	<key>Label</key>
-	<string>$CONVERTER_LABEL</string>
-	<key>MachServices</key>
-	<dict>
-		<key>$CONVERTER_LABEL.session</key>
-		<true/>
-	</dict>
-	<key>KeepAlive</key>
-	<false/>
-</dict>
-</plist>
-PLIST
-launchctl bootout "gui/$(id -u)/$CONVERTER_LABEL" >/dev/null 2>&1 || true
-launchctl bootstrap "gui/$(id -u)" "$CONVERTER_PLIST"
-
 heading "Nagi.app installed to $DEST"
 done_step "Built and code-signed"
 done_step "Copied into place"
-done_step "NagiConverter registered and running"
 
 heading "A few manual steps are still needed (macOS, not Nagi, requires these):"
 echo "  1. Reboot the machine (logging out and back in is NOT enough —"
@@ -143,6 +107,10 @@ echo "     'ひらがな' entries if Google Japanese Input / macSKK etc. are"
 echo "     also installed — check the icon to tell them apart."
 echo "  4. Switch to it from the menu bar Input menu and try typing"
 echo "     'nagi' + Enter in TextEdit — expect 'なぎ'."
+echo
+echo "NagiConverter itself needs no separate registration step (#30) —"
+echo "Nagi.app registers it via SMAppService the first time it actually"
+echo "runs, which step 4 above triggers on its own."
 if [ "$SYSTEM_WIDE" != true ]; then
   echo
   echo "If it still doesn't show up under Japanese after that, retry with"

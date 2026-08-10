@@ -131,6 +131,13 @@ if [ -f "$APP_DIR/Resources/InfoPlist.strings" ]; then
 fi
 cp "$EMOJI_SHORTCODES" "$BUNDLE/Contents/Resources/"
 
+# #25: SMAppService.agent(plistName:) requires its plist at this exact
+# path inside the bundle — see ConverterServiceRegistration.swift and
+# the plist's own header comment for why this is Contents/Library/
+# LaunchAgents/ and not Contents/Resources/ like everything else here.
+mkdir -p "$BUNDLE/Contents/Library/LaunchAgents"
+cp "$APP_DIR/Resources/LaunchAgents/"*.plist "$BUNDLE/Contents/Library/LaunchAgents/"
+
 echo "Bundling NagiConverter.app (mozc_server) ..."
 cp -R "$MOZC_SERVER_APP" "$BUNDLE/Contents/Resources/NagiConverter.app"
 
