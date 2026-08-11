@@ -141,6 +141,15 @@ cp "$APP_DIR/Resources/LaunchAgents/"*.plist "$BUNDLE/Contents/Library/LaunchAge
 echo "Bundling NagiConverter.app (mozc_server) ..."
 cp -R "$MOZC_SERVER_APP" "$BUNDLE/Contents/Resources/NagiConverter.app"
 
+# #33: embed the uninstaller the same way NagiConverter.app is embedded
+# above, so UninstallerDeployment.swift can copy it out to /Applications/
+# on first launch — one drag-and-drop into Input Methods is all the user
+# ever does, matching how a normal Mac app install feels, instead of a
+# second explicit drag for the uninstaller.
+echo "Building Uninstall Nagi.app (embedded, #33 follow-up) ..."
+"$SCRIPT_DIR/build-uninstaller.sh"
+cp -R "$BUILD_DIR/Uninstall Nagi.app" "$BUNDLE/Contents/Resources/Uninstall Nagi.app"
+
 # CODESIGN_IDENTITY overrides the default ad-hoc ("-") signature — set
 # it to a `security find-identity -v -p codesigning` SHA1 hash to sign
 # with a real identity (e.g. an Apple Development or Developer ID

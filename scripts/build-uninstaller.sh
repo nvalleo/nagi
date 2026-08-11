@@ -23,11 +23,26 @@ rm -rf "$OUT_APP"
 
 osacompile -o "$OUT_APP" "$SCRIPT_DIR/dmg/Uninstall Nagi.applescript"
 
-# nagi-tis-disable — a small compiled helper that clears the stale
-# "ひらがな (Nagi)" Input Sources entry TISDisableInputSource-side after
-# removal (#30 follow-up). AppleScript can't call Carbon APIs directly,
-# so it shells out to this instead. Built into Contents/Resources/,
-# which osacompile's app template already provides.
+# Use a desaturated variant of Nagi's own icon instead of osacompile's
+# default AppleScript applet icon (a generic scroll) — same mark, gray
+# instead of "Twilight Navy", so this doesn't look unrelated/unbranded
+# next to Nagi.app in the .dmg, but also isn't mistakable for the real
+# app at a glance (scripts/icons/generate.py, #30 follow-up). Overwriting
+# applet.icns (CFBundleIconFile in the Info.plist osacompile generates)
+# is enough on its own, but osacompile also emits an Assets.car asset
+# catalog wrapping the same default icon under CFBundleIconName, which
+# newer macOS prefers over the loose .icns when both are present —
+# removing it forces the applet.icns fallback to actually be used.
+cp "$REPO_ROOT/app/Resources/icons/Uninstall-Nagi.icns" "$OUT_APP/Contents/Resources/applet.icns"
+rm -f "$OUT_APP/Contents/Resources/Assets.car"
+
+# nagi-tis-disable — a small compiled helper that removes Nagi's entry
+# from AppleEnabledInputSources after removal (#30 follow-up — see
+# app/Sources/Nagi/InputSourceRegistration.swift for why that's the
+# mechanism that actually works, not TISDisableInputSource). AppleScript
+# can't call CoreFoundation preference APIs directly, so it shells out to
+# this instead. Built into Contents/Resources/, which osacompile's app
+# template already provides.
 swiftc -O -o "$OUT_APP/Contents/Resources/nagi-tis-disable" "$SCRIPT_DIR/dmg/nagi-tis-disable.swift"
 
 echo "Done: $OUT_APP"

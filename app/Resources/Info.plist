@@ -69,6 +69,20 @@
 	</array>
 	<key>tsInputMethodIconFileKey</key>
 	<string>nagi.tiff</string>
+	<!-- #30 follow-up: System Settings > Keyboard > Input Sources' own
+	     list row icon turned out to read neither this key nor
+	     tsInputModeMenuIconFileKey below — confirmed by
+	     JapaneseIM-RomajiTyping.app (Kotoeri) having *no* icon keys at
+	     all yet still showing correctly there. It reads TISIconLabels >
+	     CustomIcon instead (only AinuIM.app, of everything bundled with
+	     macOS, sets this), and TISIconIsTemplate must be true — a plain
+	     black-on-transparent glyph the system tints itself, hence a
+	     separate asset (Nagi-template.pdf) from nagi.tiff's colored
+	     badge, which remains what the menu bar Input menu uses. Without
+	     this, Nagi's row fell back to some generic system glyph instead
+	     of its own mark. -->
+	<key>TISIconIsTemplate</key>
+	<true/>
 	<!-- M1 is a single romaji->hiragana mode, on purpose — no katakana /
 	     half-width / full-width-roman variants yet. Compare
 	     google/mozc's mac/Info.plist (five modes) once M2 lands real
@@ -83,6 +97,11 @@
 		<dict>
 			<key>com.nvleo.inputmethod.nagi.Hiragana</key>
 			<dict>
+				<key>TISIconLabels</key>
+				<dict>
+					<key>CustomIcon</key>
+					<string>Nagi-template.pdf</string>
+				</dict>
 				<key>TISInputSourceID</key>
 				<string>com.nvleo.inputmethod.nagi.Hiragana</string>
 				<key>TISIntendedLanguage</key>

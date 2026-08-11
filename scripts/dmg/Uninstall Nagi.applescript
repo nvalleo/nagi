@@ -27,6 +27,13 @@
 -- clears it (same as Google 日本語入力's own uninstaller, which
 -- suggests — doesn't force — a restart afterwards for the same reason).
 -- This dialog mirrors that: offers a restart, doesn't require one.
+--
+-- Deletes itself as the very last step, once everything above has
+-- succeeded (#33 follow-up). It's meant to be found in /Applications
+-- (the .dmg gives it that as a drop target, see build-dmg.sh) for as
+-- long as Nagi is actually installed, not to linger forever once
+-- there's nothing left for it to uninstall — same convention as most
+-- uninstaller utilities, self included.
 
 set systemApp to "/Library/Input Methods/Nagi.app"
 set userApp to (POSIX path of (path to home folder)) & "Library/Input Methods/Nagi.app"
@@ -63,6 +70,17 @@ if userChoice is "アンインストール" then
 	do shell script quoted form of helperPath & " >/dev/null 2>&1; exit 0"
 
 	set restartChoice to button returned of (display dialog "Nagi をアンインストールしました。" & return & return & "「日本語」の入力ソース一覧に空欄の行が残ることがあります。実害はありませんが、完全に消すには再起動が必要です（今すぐでなくても構いません）。" buttons {"後で", "今すぐ再起動"} default button "後で" with icon note)
+
+	-- Finally, remove the uninstaller itself — otherwise it lives
+	-- forever wherever it was dragged (typically /Applications, #33
+	-- follow-up: the .dmg gives it that as a drop target specifically
+	-- so it survives the .dmg being ejected/deleted, which also means
+	-- nothing else ever cleans it up). Removing a running app's own
+	-- bundle is fine on macOS — unlike Finder's GUI trash (which
+	-- refuses while a process is "open"), a plain rm/unlink works
+	-- immediately, and this process keeps running to completion on its
+	-- already-loaded pages regardless.
+	do shell script "rm -rf " & quoted form of (POSIX path of (path to me))
 
 	if restartChoice is "今すぐ再起動" then
 		tell application "System Events" to restart

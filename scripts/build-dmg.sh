@@ -30,10 +30,17 @@
 # scripts/install-ime.sh's per-user default remains available for
 # anyone building from source instead.)
 #
-# Also bundles "Uninstall Nagi.app" (#30 follow-up, see
+# Also carries a top-level "Uninstall Nagi.app" (#30 follow-up, see
 # build-uninstaller.sh) — a double-clickable uninstaller for the same
 # audience this DMG targets: people without a Terminal, who can't run
-# scripts/uninstall-ime.sh themselves.
+# scripts/uninstall-ime.sh themselves. This copy is a fallback only:
+# Nagi.app embeds its own copy and deploys it to /Applications/ on
+# first launch (#33, UninstallerDeployment.swift) — one drag
+# (Nagi.app → Input Methods) is all installing takes, same as any other
+# Mac app, no second drag for the uninstaller. The copy here exists for
+# the case Nagi.app never got to run at all (e.g. Gatekeeper blocked it
+# and the user gave up before getting past that) — run it straight from
+# the mounted .dmg in that case.
 #
 # Usage: build-dmg.sh
 #
@@ -46,8 +53,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DMG_RESOURCES="$SCRIPT_DIR/dmg"
 
+# build-app.sh already calls build-uninstaller.sh itself (to embed a
+# copy — see above), which leaves a fresh top-level .build-app/Uninstall
+# Nagi.app as a side effect; reused as-is for the .dmg's own fallback
+# copy rather than building it a second time.
 "$SCRIPT_DIR/build-app.sh" release
-"$SCRIPT_DIR/build-uninstaller.sh"
 
 APP_BUNDLE="$REPO_ROOT/.build-app/Nagi.app"
 UNINSTALLER_APP="$REPO_ROOT/.build-app/Uninstall Nagi.app"
