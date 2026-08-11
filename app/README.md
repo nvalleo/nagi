@@ -28,8 +28,12 @@ TextEdit. No conversion yet (that's M2, via `MozcClient` — see
 - `Resources/InfoPlist.strings` — display names for the Input Source
   picker. Without this, macOS shows the raw `TISInputSourceID` string
   instead of "Nagi"/"ひらがな".
-- `Resources/icons/nagi.tiff` — placeholder mode icon (a generic system
-  icon, not real artwork — revisit before any real release).
+- `Resources/icons/nagi.tiff` — the menu bar / Input Sources list mode
+  icon (real artwork, generated from `scripts/icons/generate.py` — see
+  `scripts/build-icons.sh`). An alpha-cutout badge matching Apple's own
+  IME icons (e.g. AinuIM.app's Ainu.tiff), required for
+  `TISIconIsTemplate` (see Info.plist) to tint it correctly instead of
+  rendering a solid blob (issue #35).
 
 ## Why no `.xcodeproj`
 
