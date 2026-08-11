@@ -12,7 +12,7 @@ IMKit のスケルトンをシステム設定に登録し、TextEdit にテキ�
 - `Sources/Nagi/RomajiConverter.swift` — 小さな貪欲法によるローマ字→ひらがな変換テーブル。意図的に Mozc ではない — 理由はファイルヘッダー参照。
 - `Resources/Info.plist` — IMKit 登録用のメタデータ（接続名、コントローラークラス、宣言された入力モード）。google/mozc 自身の`mac/Info.plist`、macSKK、Apple の純正バンドル`/System/Library/Input Methods/AinuIM.app`と照合し、間違えやすいキーを正しく設定した（下記「登録されるまで」参照 — 「キーを正しく設定する」以上の手間がかかった）。
 - `Resources/InfoPlist.strings` — 入力ソースピッカー用の表示名。これがないと、macOS は"Nagi"/"ひらがな"の代わりに生の`TISInputSourceID`文字列を表示する。
-- `Resources/icons/nagi.tiff` — プレースホルダーのモードアイコン（汎用システムアイコンで、本物のアートワークではない — 実リリース前に見直すこと）。
+- `Resources/icons/nagi.tiff` — メニューバー／入力ソース一覧のモードアイコン（本物のアートワーク、`scripts/icons/generate.py` から生成 — `scripts/build-icons.sh` 参照）。Apple 純正 IME（AinuIM.app の Ainu.tiff 等）と同じ、透明の穴でグリフを抜く形式。`TISIconIsTemplate`（Info.plist 参照）が正しく色をティントするために必須（#35）。
 
 ## `.xcodeproj`がない理由
 

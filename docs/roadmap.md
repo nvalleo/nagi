@@ -145,10 +145,15 @@ The scope beyond M3 depends on how M0–M3 landed. Candidates:
   [#19](https://github.com/nv-leo/nagi/issues/19).** `:`-triggered emoji
   shortcode search (Slack/GitHub style): typing `:` starts narrowing emoji
   by name as you keep typing.
-- App icon design — **open, [#25](https://github.com/nv-leo/nagi/issues/25).**
-  Menu bar icon (`app/Resources/icons/nagi.tiff`) is still a generic
-  placeholder; `Nagi.app` also has no `.icns`/`CFBundleIconFile` yet, so
-  Dock/Finder show a generic app icon too.
+- App icon design — **done, [#25](https://github.com/nv-leo/nagi/issues/25).**
+  Dock/Finder icon (`Nagi.icns`) and menu bar / Input Sources badge
+  (`nagi.tiff`) both real artwork. The badge went through a follow-up,
+  [#35](https://github.com/nv-leo/nagi/issues/35): it rendered as a blank
+  square everywhere (menu bar and the Input Sources list row) until
+  redrawn as an alpha-cutout — `TISIconIsTemplate` discards color and
+  repaints from alpha alone, and a changed icon for an already-registered
+  Text Input Source only takes effect after a real logout/login, not a
+  relaunch.
 - Optional LLM-backed suggestions via a local endpoint (keeping the
   no-network-by-default promise).
 - Preferences pane (`mozc_tool`-style, but native).
