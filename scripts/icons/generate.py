@@ -36,13 +36,14 @@ finally checked against this, rather than just checked for visual
 correctness in isolation). Dropping TISIconIsTemplate entirely instead
 (to keep this file's real color, Google 日本語入力-style) was also tried
 — broke the list row's CustomIcon without fixing the menu bar badge
-either; reverted. The menu bar badge staying blank after that turned out
-to be unrelated to color/alpha at all: a changed icon for an
-already-registered Text Input Source, like every other change in this
-app, only gets picked up at the next login (see
-InputSourceRegistration.swift) — relaunching Nagi or toggling other
-input sources doesn't do it. Confirmed working, both here and in the
-list row, after a real logout/login, once this alpha-cutout redraw was
+either; reverted. Unlike the list row (which re-reads its icon live —
+every asset swap during that investigation showed up there immediately,
+no logout needed), the menu bar badge stayed blank regardless of what
+was tried here, for a reason unrelated to color/alpha at all: a changed
+icon for an already-registered Text Input Source only gets picked up by
+the menu bar at the next login (see InputSourceRegistration.swift) —
+relaunching Nagi or toggling other input sources doesn't do it. Confirmed
+working after a real logout/login, once this alpha-cutout redraw was
 combined with correct HiDPI tagging (scripts/icons/mktiff.swift, replacing
 `tiffutil -cathidpicheck` which never tagged the 2x representation as
 HiDPI at all — see that script's header).

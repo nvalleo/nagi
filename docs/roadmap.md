@@ -151,9 +151,9 @@ The scope beyond M3 depends on how M0–M3 landed. Candidates:
   [#35](https://github.com/nv-leo/nagi/issues/35): it rendered as a blank
   square everywhere (menu bar and the Input Sources list row) until
   redrawn as an alpha-cutout — `TISIconIsTemplate` discards color and
-  repaints from alpha alone, and a changed icon for an already-registered
-  Text Input Source only takes effect after a real logout/login, not a
-  relaunch.
+  repaints from alpha alone. The list row re-reads its icon live; the
+  menu bar badge doesn't — a changed icon there only takes effect after a
+  real logout/login, not a relaunch.
 - Optional LLM-backed suggestions via a local endpoint (keeping the
   no-network-by-default promise).
 - Preferences pane (`mozc_tool`-style, but native).
