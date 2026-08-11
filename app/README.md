@@ -61,8 +61,9 @@ real identity instead — not required, ad-hoc works fine).
 For trying Nagi out without a full dev environment (Xcode, Bazel, ... —
 see "Build" above): `scripts/build-dmg.sh` packages a built `Nagi.app`
 into a plain drag-and-drop `.dmg` — just the app, no installer package.
-Not yet attached to a GitHub Release (no release has been cut), so for
-now this still means building it locally first:
+Attached to the [latest GitHub
+Release](https://github.com/nv-leo/nagi/releases/latest); to build one
+locally instead:
 
 ```sh
 ./scripts/build-dmg.sh   # -> .build-dmg/Nagi-<version>.dmg
@@ -76,16 +77,32 @@ as the actual standard once you look past the big corporate installers
 [this r/opensource thread](https://www.reddit.com/r/opensource/comments/1ku0zv0/)
 for the correction — an earlier version of this section pointed at a
 `.pkg` instead). The one accommodation still needed: Nagi has to land in
-`/Library/Input Methods/`, not `/Applications/`, so the DMG's drop
-target is a symlink to that folder instead of the usual Applications
-alias. What made dropping the custom installer possible at all: Nagi.app
+`/Library/Input Methods/`, not `/Applications/`, so `Nagi.app`'s drop
+target in the DMG is a symlink to that folder instead of the usual
+Applications alias. That's still only one drag, though — the DMG isn't
+asking for a second one to place `Uninstall Nagi.app` too (#33
+follow-up): Nagi.app embeds a copy of it and deploys it to
+`/Applications/` itself on first launch
+(`app/Sources/Nagi/UninstallerDeployment.swift`), the same way it
+already self-registers `NagiConverter` and the Text Input Source below.
+Writing to `/Applications/` doesn't need admin privileges the way
+`/Library/Input Methods/` does (it's `root:admin`, group-writable, same
+reason Finder never prompts when *you* drag a normal app there), so
+this needs no extra permission dialog beyond the one already required
+for step 1. The DMG still carries its own top-level copy of `Uninstall
+Nagi.app` too, purely as a fallback for the case Nagi.app never got to
+run at all (e.g. Gatekeeper blocked it and the user gave up before
+getting past that). What made dropping the custom installer possible at
+all in the first place: Nagi.app
 now registers its own `NagiConverter` LaunchAgent via `SMAppService` the
 first time it runs (see
 `app/Sources/Nagi/ConverterServiceRegistration.swift`), and — as of the
-M4 #30 follow-up — also registers itself as a Text Input Source without
-needing a reboot (`app/Sources/Nagi/InputSourceRegistration.swift`, see
-"Getting registered" below) — no installer script needs to do either on
-its behalf anymore.
+M4 #30 follow-up — also registers itself as a Text Input Source
+(`app/Sources/Nagi/InputSourceRegistration.swift`, see "Getting
+registered" below) — no installer script needs to do either on its
+behalf anymore. Neither one takes effect until the next login, though
+(same "Getting registered" section) — not a full reboot, but not
+instant either.
 
 **Unsigned — there is no Apple Developer Program membership (Developer
 ID) behind this repo, so macOS's Gatekeeper will block the first open of
@@ -113,18 +130,31 @@ just needs a paid Developer ID first.
 
 1. **Launch `Nagi.app` once** — double-click it in Finder, or `open
    "/Library/Input Methods/Nagi.app"`. This triggers self-registration
-   (`app/Sources/Nagi/InputSourceRegistration.swift`, #30 follow-up) —
-   **no reboot needed anymore.** Earlier versions of this doc said a full
-   reboot was required here; see "Getting registered" below for why that
-   turned out not to be a hard requirement after all.
-2. System Settings → Keyboard → Input Sources → "Nagi" should already be
-   listed under Japanese, no "+" needed (self-registration enables it
-   directly). If other Japanese IMEs are installed (Google Japanese
-   Input, macSKK, ...), there may be multiple entries named "ひらがな" —
-   check the mode icon to tell Nagi's apart. If it's missing, fall back
-   to Edit... → "+" → find "Nagi" under Japanese → Add.
-3. Switch to it from the menu bar Input menu.
-4. In TextEdit, type `nagi` then Enter.
+   (`app/Sources/Nagi/InputSourceRegistration.swift`, #30 follow-up), and
+   an alert dialog should pop up on top of whatever you're doing,
+   offering to log you out right there
+   (`app/Sources/Nagi/FirstRunPrompt.swift`) — click through that (or
+   its "あとで"/"later" button, then do step 2 yourself) rather than
+   waiting on a notification: a background notification was tried first
+   but is unreliable for a Dock-icon-less, window-less `LSUIElement` app
+   like Nagi (confirmed failing with "Notifications are not allowed for
+   this application" — see `app/Sources/Nagi/ConverterServiceRegistration.swift`),
+   which is exactly why this alert exists instead.
+2. **Log out and back in once**, if step 1's alert didn't already do it
+   for you. Nothing shows up yet — not System
+   Settings' Input Sources list, not the menu bar Input menu, not
+   conversion — even though registration already succeeded; see
+   "Getting registered" below for why it all waits for the next login.
+   No full reboot needed, just a log out — the same one-time step
+   Google 日本語入力 and other third-party macOS IMEs also require.
+3. System Settings → Keyboard → Input Sources → "Nagi" should now be
+   listed under Japanese, no "+" needed. If other Japanese IMEs are
+   installed (Google Japanese Input, macSKK, ...), there may be
+   multiple entries named "ひらがな" — check the mode icon to tell
+   Nagi's apart. If it's still missing, fall back to Edit... → "+" →
+   find "Nagi" under Japanese → Add.
+4. Switch to it from the menu bar Input menu.
+5. In TextEdit, type `nagi` then Enter.
 
 ## Uninstall
 
@@ -137,19 +167,17 @@ just needs a paid Developer ID first.
 Installed via the `.dmg` above? That's `/Library/Input Methods/`, so use
 `--system`.
 
-Removes `Nagi.app` and stops the `NagiConverter` LaunchAgent. Didn't
-exist until #30's install/uninstall follow-up — `install-ime.sh` had no
-counterpart before that.
-
-**Confirmed (#30): no reboot needed, but a manual step is.** "ひらがな
-(Nagi)" stays listed in System Settings' Input Sources after running
-this — it won't disappear on its own without a reboot — but it also
-stops being switchable to, since its backing bundle is gone. Clear it
-immediately (no reboot) via System Settings > Keyboard > Input Sources >
-Edit... > select "ひらがな (Nagi)" > "−". See docs/architecture.md's
-"Mozc IPC" section for the full test and why this differs from Google
-日本語入力's own uninstaller, which clears its entry without that manual
-step.
+Removes `Nagi.app`, stops the `NagiConverter` LaunchAgent, and clears
+Nagi's entry from System Settings' Input Sources — no manual step, no
+reboot needed (#33: this compiles and runs
+`scripts/dmg/nagi-tis-disable.swift` on the fly, the same helper the GUI
+`Uninstall Nagi.app` uses). Requires `swiftc` (Xcode Command Line
+Tools); if that's unavailable the Input Sources entry falls back to the
+old behavior — lingers, non-switchable-to, until cleared by hand via
+System Settings > Keyboard > Input Sources > Edit... > select "ひらがな
+(Nagi)" > "−" (no reboot needed for that either) or a reboot.
+`uninstall-ime.sh` didn't exist until #30's install/uninstall
+follow-up — `install-ime.sh` had no counterpart before that.
 
 **Untested (#30): `NagiConverter` may similarly linger in System
 Settings > General > Login Items.** Since it's registered via
@@ -198,26 +226,55 @@ error from any tool. If this breaks again, check these in order:
    boot does. Restarting `imklaunchagent`/`TextInputMenuAgent` by hand
    doesn't help either.
 
-   **Resolved, M4 (#30 follow-up) — item 3 turned out not to be a hard
-   requirement.** `imklaunchagent`/`TextInputMenuAgent` cache the Text
-   Input Source registry once, at their own process startup, and never
-   rescan it afterwards — that's the actual mechanism behind "only a
-   full reboot works", since a reboot is what restarts them along with
-   everything else. `TISRegisterInputSource`/`TISEnableInputSource` do
-   correctly write through to the underlying registry even without a
-   reboot (confirmed: a *fresh* process reads the change back
-   correctly) — the two agents just don't know about it until *they*
-   restart. `launchctl kickstart -k` on either is blocked by SIP
-   ("Operation not permitted while System Integrity Protection is
-   engaged"), which is almost certainly why the "restarting by hand
-   doesn't help" claim above was wrong — that earlier attempt never
-   actually restarted anything. A plain `kill -HUP` (not going through
-   `launchctl`) does terminate them, and launchd immediately respawns
-   both as on-demand agents, which do pick up the change. Nagi.app now
-   does exactly this itself on first launch after install — see
-   `app/Sources/Nagi/InputSourceRegistration.swift`. None of this is
-   documented Apple behavior; if a future macOS version changes it, this
-   degrades back to the old reboot-required behavior, not a crash.
+   **Partially resolved, M4 (#30 follow-up) — a full *reboot* is no
+   longer needed, but a *log out and back in* still is.** Full write-up
+   in [issue #33](https://github.com/nv-leo/nagi/issues/33) — short
+   version: Nagi.app appends its own entry to the
+   `AppleEnabledInputSources` array in the `com.apple.HIToolbox`
+   preference domain directly via `CFPreferencesSetValue` (see
+   `app/Sources/Nagi/InputSourceRegistration.swift`) — that's the array
+   System Settings' Input Sources list, the menu bar Input menu, and
+   conversion all ultimately depend on being correct. It does **not**,
+   however, make any of the three pick Nagi up in the *current* login
+   session — confirmed against a genuinely fresh install (never
+   previously registered in that session): System Settings' Input
+   Sources list still doesn't show Nagi even freshly reopened, quit and
+   relaunched.
+
+   Extensive live reverse-engineering (disassembling the relevant
+   HIToolbox private functions, differential testing against
+   Kotoeri/AinuIM/plain keyboard layouts) found that neither System
+   Settings nor the menu bar Input menu (the latter built from
+   `_TSMCopySelectableInputSourcesInUIOrder()`) reads
+   `AppleEnabledInputSources` directly — both read a
+   **login-session-scoped pasteboard** HIToolbox materializes via
+   `UpdatePBInputSourcesInUIOrder`, which expands a bare "Keyboard Input
+   Method" parent entry (the shape Nagi writes) into its visible
+   "Input Mode" child (the shape Kotoeri's own entries already include)
+   — and that expansion only happens at login, not on demand.
+   `killall -HUP`-restarting `imklaunchagent`/`TextInputMenuAgent` (an
+   earlier version of this file did that) restarts the agents fine but
+   doesn't touch the stale pasteboard, so it was removed — pure cost (a
+   brief hiccup in text input switching), zero benefit.
+   `TISEnableInputSource`/`TISDisableInputSource` looked more promising
+   — they do trigger a genuine one-time user consent dialogue the first
+   time they're called for a given source — but calling them on Nagi's
+   own bundle or its Hiragana mode is a silent no-op (`OSStatus noErr`,
+   nothing changes) both before *and* after granting that consent. The
+   only way found to force the rebuild is enabling/disabling some
+   unrelated, already-installed input source, which is not something to
+   do to a user's real configuration from inside an install path.
+   Likewise, `NagiConverter`'s `SMAppService` registration
+   (`app/Sources/Nagi/ConverterServiceRegistration.swift`) reports
+   `.enabled` immediately, but the LaunchAgent isn't actually loaded
+   into launchd for the *current* login session until the next login —
+   nothing in-process can force that either.
+
+   Net result: install → launch once → log out and back in once →
+   System Settings, the menu bar, and conversion all pick Nagi up
+   together, no manual "+" needed. **Not a Nagi-specific bug** — Google
+   日本語入力 and macSKK's own install guides document the exact same
+   one-time requirement.
 
 None of the following turned out to matter, despite each looking
 plausible mid-investigation — noted here so nobody re-derives them:

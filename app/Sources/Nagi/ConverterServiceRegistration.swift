@@ -49,11 +49,23 @@ enum ConverterServiceRegistration {
                 // Nagi is LSUIElement — no Dock icon, no window, so a
                 // manual "double-click Nagi.app to register" (the
                 // install docs' recommended smoke test) otherwise looks
-                // like nothing happened at all. A one-shot notification,
-                // only on this notRegistered -> registered transition
-                // (never fires again once .enabled), is the only
-                // feedback available without adding real UI to what's
-                // supposed to be a headless host process.
+                // like nothing happened at all. This best-effort,
+                // one-shot notification (only on this notRegistered ->
+                // registered transition, never fires again once
+                // .enabled) is meant as that feedback, and would double
+                // as the "log out and back in" prompt (#33) — but
+                // `UNUserNotificationCenter` authorization is unreliable
+                // for an LSUIElement app that never becomes frontmost:
+                // confirmed failing end-to-end with "Notifications are
+                // not allowed for this application" (unified log,
+                // subsystem com.nvleo.inputmethod.nagi) even after
+                // main.swift's `DispatchQueue.main.async` deferral, an
+                // earlier fix attempt for a related timing quirk with
+                // this same API — see main.swift's comment. Left in as
+                // a courtesy for whenever it does work rather than
+                // removed; app/README.md's install steps don't depend
+                // on it firing, and FirstRunPrompt.swift's NSAlert
+                // (no permission needed) is the reliable path now.
                 notifyFirstRegistration()
             } catch {
                 // Not fatal — Nagi still works for anything that doesn't
@@ -96,7 +108,7 @@ enum ConverterServiceRegistration {
             let content = UNMutableNotificationContent()
             content.title = "Nagi"
             content.body =
-                "セットアップが完了しました。再起動後、システム設定 > キーボード > 入力ソース から Nagi を追加してください。"
+                "セットアップが完了しました。一度ログアウトしてログインし直すと、入力ソースとして使えるようになります（再起動は不要です）。"
             let request = UNNotificationRequest(
                 identifier: "com.nvleo.inputmethod.nagi.converter-registered",
                 content: content,

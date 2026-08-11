@@ -25,6 +25,7 @@
 
 - [What it is](#what-it-is)
 - [Install](#install)
+- [Uninstall](#uninstall)
 - [Why another Japanese IME](#why-another-japanese-ime)
 - [Non-goals](#non-goals)
 - [Architecture at a glance](#architecture-at-a-glance)
@@ -45,23 +46,43 @@ are aiming for: light, quiet, predictable.
 
 ## Install
 
-No GitHub Release has been cut yet (`nagi` is pre-alpha) — for now,
-building from source is the only option. See
-[`app/README.md`](app/README.md) for the full build/install steps; the
-gist:
+Download `Nagi-<version>.dmg` from the
+[latest release](https://github.com/nv-leo/nagi/releases/latest), open
+it, and drag `Nagi.app` onto the `Input Methods` alias inside. Open
+`Nagi.app` once (macOS will warn it's from an unidentified developer —
+Control-click > Open handles that), **then log out and back in once**
+before typing with it: macOS only picks up a freshly-installed input
+method — in System Settings > Keyboard > Input Sources, the menu bar,
+and its conversion engine alike — at the next login, not immediately.
+No full restart needed, just a log out — the same one-time step Google
+日本語入力 and other third-party macOS IMEs also require, not something
+`nagi` can skip. `nagi` is pre-alpha and unsigned/unnotarized (no paid
+Apple Developer ID yet) — the `.dmg`'s own `README.txt` has the full
+walkthrough, including what to do if macOS is extra stubborn about
+opening it.
 
-```sh
-./scripts/build-dmg.sh   # -> .build-dmg/Nagi-<version>.dmg
-```
+Prefer building it yourself instead? See [`app/README.md`](app/README.md)
+for the full build-from-source steps
+(`./scripts/build-dmg.sh` produces the same `.dmg`).
 
-then drag `Nagi.app` onto the `Input Methods` alias inside the `.dmg`,
-open it once (macOS will warn it's from an unidentified developer —
-Control-click > Open handles that), and it's ready: no reboot needed to
-show up under System Settings > Keyboard > Input Sources. To remove it
-later, double-click the `Uninstall Nagi.app` bundled in the same `.dmg`.
+## Uninstall
 
-Once a Release exists, this section will point at the prebuilt `.dmg`
-directly instead.
+Double-click `Uninstall Nagi.app` in your Applications folder — Nagi
+copies it there itself the first time it runs, so it's there whenever
+you actually need it without a second thing to drag out of the `.dmg`
+during install. (Nagi never got to run at all? The `.dmg` also carries
+its own copy as a fallback — run that one instead.) It asks for
+confirmation and your admin password, then removes Nagi, stops its
+background process, and clears its entry from Input Sources — no
+Terminal needed. An empty, unlabeled row can be left behind under the
+日本語 (Japanese) group afterwards; it's harmless, and the uninstaller
+offers (but doesn't force) a restart to clear it. It removes itself as
+the last step, once everything else has succeeded — nothing left over
+to throw away by hand.
+
+Built from source instead? `./scripts/uninstall-ime.sh --system` does
+the file/process cleanup part — see [`app/README.md`](app/README.md)
+for the rest.
 
 ## Why another Japanese IME
 

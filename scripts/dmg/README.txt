@@ -11,7 +11,8 @@ Nagi — install
      - Control-click (or right-click) Nagi.app, choose "Open", then
        click "Open" again in the dialog that appears.
    Opening it this one time is all it takes — Nagi finishes setting
-   itself up automatically. No restart needed.
+   itself up automatically, including copying "Uninstall Nagi.app" into
+   your Applications folder for later. No restart needed.
 
    If step 2 above doesn't offer an "Open" option (some versions of
    macOS instead say the app "is damaged"), it's not actually damaged —
@@ -31,20 +32,27 @@ Nagi — install
 4. Switch to it from the input menu in your menu bar. Try it in
    TextEdit: type "nagi" and press Enter — it should turn into "なぎ".
 
-That's it — no restart required anywhere in this process.
+That's it — no restart required anywhere in this process, and no second
+app to drag anywhere: dragging Nagi.app in step 1 is the only drag.
 
 ---
 
 Uninstall
 
-Double-click "Uninstall Nagi.app" in this window (it works from
-wherever you keep it, it doesn't need to stay next to Nagi.app). It
-asks you to confirm, then for your admin password, and then removes
-everything — the app, its background process, and its entry in Input
-Sources.
+Double-click "Uninstall Nagi.app" in your Applications folder
+(Launchpad or Finder both work) — it ended up there on its own after
+step 2 above. It asks you to confirm, then for your admin password, and
+then removes everything: the app, its background process, and its
+entry in Input Sources.
+
+(Never got past step 2 above — Nagi.app wouldn't open at all? Use the
+"Uninstall Nagi.app" in this window instead; it does the same thing.)
 
 One small thing it can't clean up: an empty, unlabeled row can be left
 behind under the 日本語 (Japanese) group in Input Sources. It's harmless
 and you can't accidentally switch to it — but if it bothers you, a
 restart clears it completely. The uninstaller will offer to restart for
 you; feel free to say no and do it later, whenever's convenient.
+
+Once it's done, it removes itself too — there's nothing left over to
+throw away by hand.

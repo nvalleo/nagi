@@ -72,6 +72,18 @@ approach) and the correct bundle-relative `program identifier`. This is
 what made dropping the custom installer for `scripts/build-dmg.sh`
 possible — see app/README.md's "Prebuilt download (.dmg)".
 
+**One caveat, found during the #33 follow-up below:** `register()`
+reporting `.enabled` does not mean the job is loaded into launchd for
+the *current* login session — `launchctl print` on a just-registered
+service can come back "Could not find service" even though
+`sfltool dumpbtm` already shows it `enabled, allowed`. Nothing in
+Nagi.app can force the load; it happens automatically starting the
+*next* login. See "Getting registered as a Text Input Source" below —
+the Text Input Source registration has the identical limitation, for
+different underlying reasons, and both are why conversion needs one
+log out/in after the very first install just like the menu bar entry
+does.
+
 Nagi is LSUIElement (no Dock icon, no window), so registering silently
 leaves no feedback that anything happened — `ConverterServiceRegistration`
 also posts a one-shot local notification the first time registration
@@ -132,31 +144,80 @@ a downloaded macSKK release). Three silent requirements came out of it:
    after a full reboot**, not a log out/in — the commonly-cited advice —
    and not by restarting `imklaunchagent`/`TextInputMenuAgent` by hand.
 
-**Resolved, M4 (#30 follow-up) — item 3 turned out not to be a hard
-requirement.** `imklaunchagent` and `TextInputMenuAgent` cache their view
-of the Text Input Source registry once, at their own process startup, and
-never rescan it afterwards — that's the actual mechanism behind "only a
-full reboot works": a reboot is simply what restarts them along with
-everything else. `TISRegisterInputSource`/`TISEnableInputSource` do
-correctly write through to the underlying registry without a reboot
-(verified: a *fresh* process reads the change back correctly); the two
-agents just don't know about it until *they* restart. `launchctl
-kickstart -k` on either is blocked by SIP ("Operation not permitted while
-System Integrity Protection is engaged"), which is almost certainly why
-the "restarting by hand doesn't help" claim above was wrong — that
-earlier attempt never actually restarted anything, SIP silently ate it. A
-plain `kill -HUP` (not going through `launchctl`) does terminate them,
-and launchd immediately respawns both as on-demand agents, which pick up
-the change on the way back up. `Nagi.app` now does exactly this itself —
-`TISRegisterInputSource` + `TISEnableInputSource` (parent bundle, then
-the `Hiragana` mode — a mode can only flip disabled → enabled once its
-parent already is, per `kTISPropertyInputSourceIsEnableCapable`'s
-discussion in `TextInputSources.h`), followed by `kill -HUP` on both
-agents *only* when that actually changed something, i.e. only once, not
-on every launch. See `app/Sources/Nagi/InputSourceRegistration.swift`.
-None of this is documented Apple behavior — if a future macOS version
-changes it, this degrades back to the old reboot-required behavior
-(`enable()` in that file is already unconditionally best-effort), not a
+**Partially resolved, M4 (#30 follow-up) — item 3's full *reboot* is no
+longer needed, but a *log out and back in* still is.** Full write-up,
+including two wrong attempts that briefly shipped along the way, in
+[issue #33](https://github.com/nv-leo/nagi/issues/33) — summary:
+
+- `Nagi.app` appends its own entry to the `AppleEnabledInputSources`
+  array in the `com.apple.HIToolbox` preference domain directly via
+  `CFPreferencesSetValue`, alongside the required (but not by itself
+  sufficient) `TISRegisterInputSource` call that gets the bundle into
+  the installed catalogue
+  (`app/Sources/Nagi/InputSourceRegistration.swift`). This array is
+  what System Settings' Input Sources list, the menu bar Input menu,
+  and conversion all ultimately depend on being correct.
+- Writing it does **not**, however, make any of the three pick Nagi up
+  in the *current* login session — confirmed against a genuinely fresh
+  install (never previously registered in that session): System
+  Settings' Input Sources list still didn't show Nagi even freshly
+  reopened, quit and relaunched. This took two more rounds of live
+  reverse-engineering (disassembling the relevant HIToolbox private
+  functions, differential testing against Kotoeri/AinuIM/plain keyboard
+  layouts) to pin down:
+  - Neither System Settings nor the menu bar Input menu (the latter
+    built from `_TSMCopySelectableInputSourcesInUIOrder()`) reads
+    `AppleEnabledInputSources` directly. Both read a
+    **login-session-scoped pasteboard** that HIToolbox materializes via
+    `UpdatePBInputSourcesInUIOrder` ("PB" = PasteBoard) — which is also
+    what expands a bare "Keyboard Input Method" parent entry (the shape
+    Nagi writes) into the visible "Input Mode" child entry (the shape
+    Kotoeri's own entries already include) — and that rebuild only
+    happens at login, not on demand. An earlier version of this file
+    (and of `InputSourceRegistration.swift`) believed
+    `killall -HUP imklaunchagent TextInputMenuAgent` after the
+    preference write stood in for a reboot, the same way it does for
+    the on-boot registry rescan in item 3 above. It doesn't:
+    `launchctl print` confirms the signal does restart both agents, but
+    neither agent is what's stale, so nothing changes — pure cost (a
+    brief hiccup in text input switching) for zero benefit. Removed
+    from `InputSourceRegistration.swift`.
+  - `TISEnableInputSource`/`TISDisableInputSource` looked like a more
+    legitimate way to force that rebuild, and do trigger a genuine
+    one-time user consent dialogue the first time they're called for a
+    given source — but calling them on Nagi's own bundle or its
+    Hiragana mode is a silent no-op (`OSStatus noErr`, nothing changes)
+    both before *and* after granting that consent, verified repeatedly.
+    (`kTISPropertyInputSourceIsEnabled` also reads back a phantom
+    `true` for Nagi regardless, synthesised from
+    `tsInputModeDefaultStateKey` in Info.plist rather than the actual
+    preference — an earlier theory pinned the no-op on that phantom
+    value gating the call, but the same no-op persisted even against a
+    *different*, honestly-`false` system input mode, so that theory
+    doesn't hold either.) The only way found to actually force the
+    rebuild is enabling/disabling some unrelated, already-installed
+    input source (e.g. a keyboard layout) — not something to do to a
+    user's real configuration from inside an install path, and it has
+    its own side effect of pruning Nagi's own preference entry as
+    "orphaned" if it has no matching `Input Mode` entry yet.
+  - The `NagiConverter` `SMAppService` LaunchAgent (see "Runtime layout
+    on macOS" above) has the same shape of limitation: `register()`
+    reports `.enabled` (approved) immediately, but the job is not
+    actually loaded into launchd for the *current* login session until
+    the next login — nothing in-process can force that either, which is
+    why conversion itself (not just the menu bar entry) needs the same
+    one-time log out/in.
+
+Net effect, and not a Nagi-specific bug: Google 日本語入力, macSKK and
+other third-party macOS IMEs all document the same one-time requirement
+— install → launch once → log out and back in once → System Settings,
+the menu bar, and conversion all pick it up together, no manual "+"
+needed. None of the preference-writing above is documented Apple
+behavior —
+it's simply what System Settings' own UI does when you tick the
+checkbox — so if a future macOS version changes the schema, this
+degrades back to the old fully-manual behavior (every step in
+`InputSourceRegistration.swift` is unconditionally best-effort), not a
 crash.
 
 **Removal, tested and confirmed end-to-end, M4 (#30 install/uninstall

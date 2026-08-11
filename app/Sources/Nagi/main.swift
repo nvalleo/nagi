@@ -25,19 +25,29 @@ app.setActivationPolicy(.accessory)
 // ConverterServiceRegistration.swift. Deferred via `DispatchQueue.main.async`
 // (runs once `app.run()`'s run loop is actually spinning) rather than
 // called inline above — calling it before NSApplication had a running
-// run loop is what made ConverterServiceRegistration's
-// UNUserNotificationCenter authorization request unreliable during
-// testing (silently never called back, or errored with "Notifications
-// are not allowed for this application" despite the toggle being on in
-// System Settings). SMAppService's own `.register()` doesn't need this —
-// only the notification half did — but there's no harm running both
-// this late.
+// run loop was an early theory for why ConverterServiceRegistration's
+// UNUserNotificationCenter authorization request was unreliable.
+// SMAppService's own `.register()` doesn't need this, and moving the
+// notification call here didn't end up fixing it either — it still
+// fails end-to-end with "Notifications are not allowed for this
+// application" (see that file's doc comment) — but there's no harm
+// running everything below this late, and FirstRunPrompt below doesn't
+// depend on notification permission at all.
 DispatchQueue.main.async {
     ConverterServiceRegistration.registerIfNeeded()
     // Companion self-registration for the Text Input Source itself (as
     // opposed to the NagiConverter LaunchAgent above) — see
     // InputSourceRegistration.swift for why and its open questions.
     InputSourceRegistration.registerIfNeeded()
+    // #33: deploy the bundled uninstaller to /Applications/ so it has a
+    // permanent home without a second manual drag in the .dmg — see
+    // UninstallerDeployment.swift.
+    UninstallerDeployment.deployIfNeeded()
+    // The reliable (no permission needed) "log out and back in" prompt
+    // — see FirstRunPrompt.swift for why this exists alongside
+    // ConverterServiceRegistration's notification instead of replacing
+    // it.
+    FirstRunPrompt.showIfNeeded()
 }
 
 app.run()

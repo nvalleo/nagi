@@ -29,13 +29,13 @@ IMKit のスケルトンをシステム設定に登録し、TextEdit にテキ�
 
 ## ビルド済み配布（.dmg）
 
-フルの開発環境（Xcode、Bazel、...— 上記「ビルド」参照）なしで Nagi を試したい場合: `scripts/build-dmg.sh`がビルド済みの`Nagi.app`を、ドラッグ＆ドロップだけで使えるプレーンな`.dmg`にパッケージングする — 中身はアプリのみ、インストーラーパッケージはなし。まだ GitHub Release には添付していない（リリースをまだ切っていないため）ので、今のところローカルでビルドする必要がある:
+フルの開発環境（Xcode、Bazel、...— 上記「ビルド」参照）なしで Nagi を試したい場合: `scripts/build-dmg.sh`がビルド済みの`Nagi.app`を、ドラッグ＆ドロップだけで使えるプレーンな`.dmg`にパッケージングする — 中身はアプリのみ、インストーラーパッケージはなし。[最新の GitHub Release](https://github.com/nv-leo/nagi/releases/latest) に添付済み。自分でビルドする場合:
 
 ```sh
 ./scripts/build-dmg.sh   # -> .build-dmg/Nagi-<version>.dmg
 ```
 
-意図的に「アプリのみ」であり、`.pkg`／カスタムインストーラーではない — 署名・公証済みで、アプリだけが入っていて、ユーザーが好きな場所にドラッグできる DMG というのが、大手企業のインストーラーの外側で見ると、個人／小規模チームの macOS 開発者が実際に収斂している標準だから（#30 で議論、[この r/opensource のスレッド](https://www.reddit.com/r/opensource/comments/1ku0zv0/) のご指摘に感謝 — このセクションの以前のバージョンは`.pkg`を指していた）。唯一必要な配慮: Nagi は`/Applications/`ではなく`/Library/Input Methods/`に置かれる必要があるため、DMG のドロップ先は通常の Applications エイリアスではなく、そのフォルダへのシンボリックリンクになっている。カスタムインストーラーを不要にできた理由: `Nagi.app`は初回起動時に`SMAppService`経由で自分自身の`NagiConverter` LaunchAgent を登録するようになった（`app/Sources/Nagi/ConverterServiceRegistration.swift`参照）ほか、M4 の #30 フォローアップとして、reboot 不要で自分自身を Text Input Source として登録するようにもなった（`app/Sources/Nagi/InputSourceRegistration.swift`、下記「登録されるまで」参照）— もはやインストーラースクリプトがそのどちらも代行する必要はない。
+意図的に「アプリのみ」であり、`.pkg`／カスタムインストーラーではない — 署名・公証済みで、アプリだけが入っていて、ユーザーが好きな場所にドラッグできる DMG というのが、大手企業のインストーラーの外側で見ると、個人／小規模チームの macOS 開発者が実際に収斂している標準だから（#30 で議論、[この r/opensource のスレッド](https://www.reddit.com/r/opensource/comments/1ku0zv0/) のご指摘に感謝 — このセクションの以前のバージョンは`.pkg`を指していた）。唯一必要な配慮: Nagi は`/Applications/`ではなく`/Library/Input Methods/`に置かれる必要があるため、`Nagi.app`のドロップ先は通常の Applications エイリアスではなく、そのフォルダへのシンボリックリンクになっている。とはいえドラッグは 1 回だけで、`Uninstall Nagi.app`用に 2 回目のドラッグを求めることはない（#33 フォローアップ）: `Nagi.app`が自分自身の中にそのコピーを同梱していて、初回起動時に自分で`/Applications/`へ配置する（`app/Sources/Nagi/UninstallerDeployment.swift`）— 下記の`NagiConverter`や Text Input Source の自己登録と同じ仕組み。`/Applications/`への書き込みは`/Library/Input Methods/`と違って root 権限不要（`root:admin`でグループ書き込み可能、自分でアプリをドラッグしたときに Finder が認証を求めないのと同じ理由）なので、手順 1 で既に求められる以上の権限ダイアログは出ない。`.dmg`自体にも同じ`Uninstall Nagi.app`のコピーがトップレベルに入っているが、これは`Nagi.app`が一度も起動できなかった場合（Gatekeeper にブロックされて諦めた等）の予備。カスタムインストーラーを不要にできた理由: `Nagi.app`は初回起動時に`SMAppService`経由で自分自身の`NagiConverter` LaunchAgent を登録するようになった（`app/Sources/Nagi/ConverterServiceRegistration.swift`参照）ほか、M4 の #30 フォローアップとして、自分自身を Text Input Source として登録するようにもなった（`app/Sources/Nagi/InputSourceRegistration.swift`、下記「登録されるまで」参照）— もはやインストーラースクリプトがそのどちらも代行する必要はない。ただしどちらも、実際に使えるようになるのは次回ログイン時からで（同じく下記「登録されるまで」参照）、フルの reboot は不要になったものの即時ではない。
 
 **未署名 — このリポジトリの背後に Apple Developer Program のメンバーシップ（Developer ID）は存在しないため、macOS の Gatekeeper が`Nagi.app`の初回起動をブロックする。** Nagi.app を Control-click → 開く → 開く（ダイアログでもう一度）、または初回のブロック後にシステム設定 → プライバシーとセキュリティ → 「このまま開く」。どちらも「開く」の選択肢が出ない場合（最近の macOS では代わりに「壊れている」と表示され、GUI での回避手段がないことがある — 上記スレッドでも指摘あり）、quarantine 属性を手動で剥がす: `xattr -cr "/Library/Input Methods/Nagi.app"`。このフォールバックを含む完全な手順は`scripts/dmg/README.txt`（DMG 内に同梱）にある。これは同じく個人開発の macOS IME である[SwiftyGyaim](https://github.com/tanabe1478/SwiftyGyaim) が同じ理由で行っているのと同じトレードオフ。署名・公証済み DMG（macSKK/AquaSKK/azooKey-Desktop に合わせる、いずれも#30 で調査済み）はまだ roadmap（M4）上にある — 有償の Developer ID が先に必要。
 
@@ -48,10 +48,11 @@ IMKit のスケルトンをシステム設定に登録し、TextEdit にテキ�
 
 **その後、手動で:**
 
-1. **`Nagi.app`を一度起動する** — Finder でダブルクリックするか、`open "/Library/Input Methods/Nagi.app"`。これにより自己登録がトリガーされる（`app/Sources/Nagi/InputSourceRegistration.swift`、#30 フォローアップ）— **もう reboot は不要。** このドキュメントの以前のバージョンではここでフルの reboot が必要としていたが、なぜそれが必須ではなくなったかは下記「登録されるまで」を参照。
-2. システム設定 → キーボード → 入力ソース に、「+」を押さなくても既に「Nagi」が日本語の下に並んでいるはず（自己登録が直接有効化する）。他の日本語 IME（Google 日本語入力、macSKK など）がインストールされている場合、「ひらがな」という名前のエントリが複数あることがある — モードアイコンで見分けること。もし出てこない場合は、編集... → 「+」→ 日本語の下の「Nagi」を探す → 追加、にフォールバックする。
-3. メニューバーの入力メニューから切り替える。
-4. TextEdit で`nagi`と入力して Enter。
+1. **`Nagi.app`を一度起動する** — Finder でダブルクリックするか、`open "/Library/Input Methods/Nagi.app"`。これにより自己登録がトリガーされる（`app/Sources/Nagi/InputSourceRegistration.swift`、#30 フォローアップ）。作業中の画面の上に、その場でログアウトを提案するアラートダイアログが出るはず（`app/Sources/Nagi/FirstRunPrompt.swift`）——通知（バックグラウンド通知）に頼らずこの方式にしているのは、Nagi のように Dock アイコンもウィンドウも持たない`LSUIElement`アプリでは`UNUserNotificationCenter`の許可取得が不安定なため（`app/Sources/Nagi/ConverterServiceRegistration.swift`の対策済みでも「Notifications are not allowed for this application」で失敗することを実機確認済み）。アラートで「今すぐログアウト」を選ぶか、「あとで」を選んで手順 2 を自分で行うこと。
+2. **一度ログアウトしてログインし直す**（手順 1 のアラートで既に済んでいればスキップ）。この時点ではまだ何も表示されない — システム設定の入力ソース一覧にも、メニューバーにも、変換にも — 登録自体は既に成功しているにもかかわらず。なぜすべてが次回ログインまで反映されないかは、下記「登録されるまで」参照。フルの再起動は不要で、ログアウトだけで十分。Google 日本語入力など他のサードパーティ製 macOS IME も共通して必要とする一度限りの手順で、Nagi 固有の制約ではない。
+3. システム設定 → キーボード → 入力ソース を確認 — 「+」を押さなくても「Nagi」が日本語の下に並んでいるはず。他の日本語 IME（Google 日本語入力、macSKK など）がインストールされている場合、「ひらがな」という名前のエントリが複数あることがある — モードアイコンで見分けること。それでも出てこない場合は、編集... → 「+」→ 日本語の下の「Nagi」を探す → 追加、にフォールバックする。
+4. メニューバーの入力メニューから切り替える。
+5. TextEdit で`nagi`と入力して Enter。
 
 ## アンインストール
 
@@ -63,9 +64,7 @@ IMKit のスケルトンをシステム設定に登録し、TextEdit にテキ�
 
 上記の`.dmg`経由でインストールした場合は`/Library/Input Methods/`なので`--system`を使うこと。
 
-`Nagi.app`を削除し、`NagiConverter` LaunchAgent を停止する。#30 のインストール/アンインストール対応まで存在しなかった — `install-ime.sh`にはそれまで対になるスクリプトがなかった。
-
-**確認済み（#30）: reboot は不要だが、手動の一手間は必要。** このスクリプトを実行した後も「ひらがな (Nagi)」はシステム設定の入力ソース一覧に残り続ける — reboot しない限り自動では消えない — が、実体のバンドルが消えているため切り替えはできなくなる。即座に（reboot 不要で）消すには、システム設定 > キーボード > 入力ソース > 編集... > 「ひらがな (Nagi)」を選択 > 「−」。詳しい検証内容と、Google 日本語入力自身のアンインストーラーがなぜこの手動操作なしにエントリを消せるのかについては、docs/architecture.md の「Mozc IPC」節を参照。
+`Nagi.app`を削除し、`NagiConverter` LaunchAgent を停止し、システム設定の入力ソースから Nagi のエントリも消す — 手動操作も reboot も不要（#33: `scripts/dmg/nagi-tis-disable.swift`をその場でコンパイル・実行している、GUI 版`Uninstall Nagi.app`と同じヘルパー）。`swiftc`（Xcode Command Line Tools）が必要で、それが無い場合は入力ソースのエントリが以前の挙動（切り替え不可のまま残留、reboot 不要で消すにはシステム設定 > キーボード > 入力ソース > 編集... > 「ひらがな (Nagi)」を選択 > 「−」、または reboot）にフォールバックする。`uninstall-ime.sh`自体は#30 のインストール/アンインストール対応まで存在しなかった — `install-ime.sh`にはそれまで対になるスクリプトがなかった。
 
 **未検証（#30）: `NagiConverter`も同様にシステム設定 > 一般 > ログイン項目に残る可能性がある。** `SMAppService`によってアプリ内部から登録されており、このスクリプトが書き込んだ plist ファイルではないため、削除すべきファイルがそもそも存在しない — このスクリプトにできるのは実行中のジョブを`launchctl bootout`することだけで、`SMAppService.unregister()`に相当する処理は呼べない。アンインストール後にそこへ「Nagi」という古いエントリが残っていた場合、それが原因と考えられる。手動で削除する（上記の入力ソースと同じ「−」／右クリック操作）のが想定される対処法だが、実際の再インストール/アンインストールサイクルではまだ検証していない。
 
@@ -81,7 +80,11 @@ TextEdit で`nagi<Enter>`と入力すると「なぎ」が挿入される。**de
 2. **`CFBundleIdentifier`（およびその下のすべての`TISInputSourceID`）が、リテラル文字列`.inputmethod.`を含んでいなければならない。** dev マシン上で見つかった動作実績のあるすべての IMKit バンドル — Apple 純正の`AinuIM.app`、Google 日本語入力、macSKK — で二分探索して確認済み。いずれもこのトークンを使っており、リテラル文字列`.inputmethod.`は`imklaunchagent`/HIToolbox の文字列テーブル内、`__cstring`セクションの`ComponentInputModeDict`/`TISInputSourceID`のすぐ近くに埋め込まれている。これを含まないバンドル ID は、他がどれだけ正しくても静かに無視される。これが、issue #1 で最初に挙がっていたよりシンプルな`com.nvleo.nagi`ではなく、バンドル ID が`com.nvleo.inputmethod.nagi`になった理由。
 3. **バンドル ID（またはレジストリが参照する他の値）への変更は、フルの再起動後にしか反映されない。** ログアウトしてログインし直す — よく言われる対処法で、このリポジトリの過去のドキュメントも十分としていたもの — では再走査は強制され*ない*。フルの再起動だけが効く。`imklaunchagent`/`TextInputMenuAgent`を手動で再起動しても効果はない。
 
-   **解決済み、M4（#30 フォローアップ）— 項目 3 は実は絶対的な要件ではなかった。** `imklaunchagent`/`TextInputMenuAgent`は自分自身のプロセス起動時に一度だけ Text Input Source レジストリを読み込み、その後は二度と再走査しない — これが「フルの再起動だけが効く」の正体で、reboot はこれらを含む全プロセスを再起動させるからそう見えていただけだった。`TISRegisterInputSource`/`TISEnableInputSource`は reboot なしでも実際にレジストリへ正しく書き込んでいる（確認済み: *新規の*プロセスから読み直すと変更が正しく反映されている）— この 2 つのエージェントが単に、自分自身が再起動するまでその変更を知らないだけ。`launchctl kickstart -k`はどちらに対しても SIP にブロックされる（「Operation not permitted while System Integrity Protection is engaged」）ため、上記の「手動で再起動しても効果はない」という結論はほぼ確実に誤りだった — その時の試みは実際には何も再起動できていなかった。`launchctl`を経由しない素の`kill -HUP`はこれらのプロセスを実際に終了させ、launchd が即座にオンデマンドエージェントとして再 spawn し、その際に変更を読み直す。`Nagi.app`はインストール後の初回起動時にこれと全く同じことを自分自身で行うようになった — `app/Sources/Nagi/InputSourceRegistration.swift`参照。これは Apple が公式にドキュメント化した挙動ではない。将来の macOS でこれが変わった場合、クラッシュではなく単に以前の reboot 必須の挙動に戻るだけ。
+   **部分的に解決、M4（#30 フォローアップ）— フルの「reboot」は不要になったが、「ログアウト＆再ログイン」はまだ必要。** 詳しい経緯は[issue #33](https://github.com/nv-leo/nagi/issues/33) 参照 — 要約すると: `Nagi.app`は`com.apple.HIToolbox`設定ドメインの`AppleEnabledInputSources`配列に自分自身のエントリを`CFPreferencesSetValue`で直接追記する（`app/Sources/Nagi/InputSourceRegistration.swift`参照）——System Settings の入力ソース一覧・メニューバーの入力メニュー・変換のいずれも、最終的にはこの配列の内容が正しいことに依存している。ただし、これを書いただけでは**今のログインセッションでは 3 つのどれにも反映されない**ことを、一度も登録したことのない真にフレッシュな状態で確認した——System Settings は新規に開き直しても、一度終了して再度開いても、Nagi を表示しなかった。
+
+   実機での大規模な逆アセンブル調査（HIToolbox の非公開関数の解析、Kotoeri ・ AinuIM ・素のキーボードレイアウトとの差分テスト）の結果、System Settings もメニューバーの入力メニュー（`_TSMCopySelectableInputSourcesInUIOrder()`から構築）も、`AppleEnabledInputSources`を直接読んでいるのではなく、どちらも HIToolbox が`UpdatePBInputSourcesInUIOrder`で materialize する**ログインセッション単位のペーストボード**を読んでいると判明した——このペーストボードは、Nagi が書き込む「Keyboard Input Method」種別の親エントリ単体を、Kotoeri の実エントリが既に持っている「Input Mode」種別の子エントリへと展開する処理を行うが、それはログイン時にしか起きない。`imklaunchagent`/`TextInputMenuAgent`を`killall -HUP`で再起動する処理が以前のバージョンにはあったが、エージェント自体は再起動できてもペーストボードの中身までは更新されないため撤去した——効果ゼロでコスト（入力切り替えの一瞬のハングアップ）だけが残っていた。`TISEnableInputSource`/`TISDisableInputSource`はより有望に見え、初回呼び出し時には本物のユーザー許可ダイアログを表示するが、Nagi 自身のバンドルやそのひらがなモードに対して呼んでも、許可の前後を問わずサイレントな no-op（`OSStatus noErr`、何も変化しない）だった。実際にペーストボード再構築を強制できた唯一の方法は、無関係な既存の入力ソース（キーボードレイアウトなど）を enable/disable することだったが、インストール処理の中でユーザーの実際の設定を勝手に操作するのは適切ではない。`NagiConverter`の`SMAppService`登録（`app/Sources/Nagi/ConverterServiceRegistration.swift`）も同じ形の制約を抱えている——`register()`は即座に`.enabled`（承認済み）を返すが、**今のログインセッションの launchd には次回ログインまでロードされない**。これもアプリ内から強制する手段はない。
+
+   結果として: インストール → 一度起動 → 一度ログアウト・ログインし直す → System Settings ・メニューバー・変換のすべてがまとめて使えるようになる（手動での「+」操作は不要）。**これは Nagi 固有のバグではない** — Google 日本語入力や macSKK 自身のインストールガイドにも、同じ一度限りの要件が明記されている。
 
 以下は、調査の途中ではそれぞれ有力に見えたものの、結局は関係なかった — 誰も再度たどり着かなくて済むようここに記す: ad-hoc 署名 vs 実署名（実際に Apple Development 証明書を取得して確認したが違いはなかった）、hardened runtime、バイナリ形式 vs XML 形式の`Info.plist`、thin vs universal バイナリ、`LSBackgroundOnly`、`TISInputSourceID`が`ComponentInputModeDict`の辞書キーと一致しているか異なっているか、アイコンファイルの有無、`InputMethodServerDataSourceClass`/`DelegateClass`の有無。
 
