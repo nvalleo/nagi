@@ -1,16 +1,19 @@
-// FirstRunPrompt.swift — a guaranteed-to-render alternative to
-// ConverterServiceRegistration's notification for telling the user
+// FirstRunPrompt.swift — a guaranteed-to-render way to tell the user
 // "log out and back in once" after the very first launch.
 //
-// Why this exists alongside that notification rather than replacing it:
-// `UNUserNotificationCenter` needs the user to grant notification
-// permission, and that authorization request is unreliable for an
-// `LSUIElement` app that never becomes frontmost — confirmed failing
-// end-to-end with "Notifications are not allowed for this application"
-// (see ConverterServiceRegistration.swift's doc comment). An `NSAlert`
-// needs no permission at all; the only trick is getting it to actually
-// appear in front of the user despite Nagi having no Dock icon and
-// never normally activating — `NSApp.activate(ignoringOtherApps:)`
+// This replaced a UNUserNotificationCenter-based notification that used
+// to live in ConverterServiceRegistration.swift: that API needs the
+// user to grant notification permission, and the authorization request
+// was unreliable for an `LSUIElement` app that never becomes
+// frontmost — confirmed failing end-to-end with "Notifications are not
+// allowed for this application" regardless of when it was called. Worse,
+// merely *requesting* that authorization left a permanent
+// Nagi/NagiConverter entry in System Settings > Notifications with no
+// way to remove it again, even after uninstalling (#32) — so it was
+// removed outright rather than left as a parallel, unreliable path. An
+// `NSAlert` needs no permission at all; the only trick is getting it to
+// actually appear in front of the user despite Nagi having no Dock icon
+// and never normally activating — `NSApp.activate(ignoringOtherApps:)`
 // below handles that.
 //
 // One-shot via a plain `UserDefaults` flag rather than the

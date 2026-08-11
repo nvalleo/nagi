@@ -25,14 +25,14 @@ app.setActivationPolicy(.accessory)
 // ConverterServiceRegistration.swift. Deferred via `DispatchQueue.main.async`
 // (runs once `app.run()`'s run loop is actually spinning) rather than
 // called inline above — calling it before NSApplication had a running
-// run loop was an early theory for why ConverterServiceRegistration's
-// UNUserNotificationCenter authorization request was unreliable.
-// SMAppService's own `.register()` doesn't need this, and moving the
-// notification call here didn't end up fixing it either — it still
-// fails end-to-end with "Notifications are not allowed for this
-// application" (see that file's doc comment) — but there's no harm
-// running everything below this late, and FirstRunPrompt below doesn't
-// depend on notification permission at all.
+// run loop was an early theory for why a since-removed
+// UNUserNotificationCenter authorization request in that file was
+// unreliable (#32 — it never worked regardless of timing, and merely
+// requesting it left a permanent ghost entry in System Settings >
+// Notifications, so it's gone now in favor of FirstRunPrompt's NSAlert
+// below). SMAppService's own `.register()` never needed this deferral;
+// keeping it costs nothing and there's no reason to re-couple this to
+// app startup timing again.
 DispatchQueue.main.async {
     ConverterServiceRegistration.registerIfNeeded()
     // Companion self-registration for the Text Input Source itself (as
@@ -44,9 +44,7 @@ DispatchQueue.main.async {
     // UninstallerDeployment.swift.
     UninstallerDeployment.deployIfNeeded()
     // The reliable (no permission needed) "log out and back in" prompt
-    // — see FirstRunPrompt.swift for why this exists alongside
-    // ConverterServiceRegistration's notification instead of replacing
-    // it.
+    // — see FirstRunPrompt.swift.
     FirstRunPrompt.showIfNeeded()
 }
 

@@ -25,7 +25,6 @@
 
 import Foundation
 import ServiceManagement
-import UserNotifications
 import os
 
 enum ConverterServiceRegistration {
@@ -46,27 +45,21 @@ enum ConverterServiceRegistration {
             do {
                 try service.register()
                 logger.info("Registered NagiConverter LaunchAgent")
-                // Nagi is LSUIElement — no Dock icon, no window, so a
-                // manual "double-click Nagi.app to register" (the
-                // install docs' recommended smoke test) otherwise looks
-                // like nothing happened at all. This best-effort,
-                // one-shot notification (only on this notRegistered ->
-                // registered transition, never fires again once
-                // .enabled) is meant as that feedback, and would double
-                // as the "log out and back in" prompt (#33) — but
-                // `UNUserNotificationCenter` authorization is unreliable
-                // for an LSUIElement app that never becomes frontmost:
-                // confirmed failing end-to-end with "Notifications are
-                // not allowed for this application" (unified log,
-                // subsystem com.nvleo.inputmethod.nagi) even after
-                // main.swift's `DispatchQueue.main.async` deferral, an
-                // earlier fix attempt for a related timing quirk with
-                // this same API — see main.swift's comment. Left in as
-                // a courtesy for whenever it does work rather than
-                // removed; app/README.md's install steps don't depend
-                // on it firing, and FirstRunPrompt.swift's NSAlert
-                // (no permission needed) is the reliable path now.
-                notifyFirstRegistration()
+                // #32: this used to also fire a one-shot
+                // UNUserNotificationCenter notification here as
+                // "registration succeeded" feedback (Nagi is
+                // LSUIElement — no Dock icon, no window — so a manual
+                // "double-click Nagi.app to register" otherwise looks
+                // like nothing happened). Removed: confirmed failing
+                // end-to-end with "Notifications are not allowed for
+                // this application" regardless (see FirstRunPrompt.swift,
+                // the reliable NSAlert-based replacement that fully
+                // subsumed this), and merely *requesting* that
+                // authorization was enough to leave a permanent
+                // Nagi/NagiConverter entry in System Settings >
+                // Notifications even after uninstalling — with no
+                // public API to remove it again from outside System
+                // Settings itself.
             } catch {
                 // Not fatal — Nagi still works for anything that doesn't
                 // need conversion (e.g. this run is just to trigger
@@ -86,41 +79,6 @@ enum ConverterServiceRegistration {
             )
         @unknown default:
             logger.notice("NagiConverter LaunchAgent: unknown SMAppService status")
-        }
-    }
-
-    /// Best-effort, silent on any failure (denied permission, no
-    /// notification center available, ...) — this is a courtesy, not
-    /// something registration correctness depends on.
-    private static func notifyFirstRegistration() {
-        let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert]) { granted, error in
-            if let error {
-                logger.error(
-                    "Notification authorization request failed: \(error.localizedDescription, privacy: .public)"
-                )
-                return
-            }
-            guard granted else {
-                logger.notice("Notification authorization denied — registration still succeeded")
-                return
-            }
-            let content = UNMutableNotificationContent()
-            content.title = "Nagi"
-            content.body =
-                "セットアップが完了しました。一度ログアウトしてログインし直すと、入力ソースとして使えるようになります（再起動は不要です）。"
-            let request = UNNotificationRequest(
-                identifier: "com.nvleo.inputmethod.nagi.converter-registered",
-                content: content,
-                trigger: nil
-            )
-            center.add(request) { error in
-                if let error {
-                    logger.error(
-                        "Failed to post registration notification: \(error.localizedDescription, privacy: .public)"
-                    )
-                }
-            }
         }
     }
 }
