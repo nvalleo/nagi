@@ -34,4 +34,16 @@ osacompile -o "$OUT_APP" "$SCRIPT_DIR/dmg/Install Nagi.applescript"
 cp "$REPO_ROOT/app/Resources/icons/Nagi.icns" "$OUT_APP/Contents/Resources/applet.icns"
 rm -f "$OUT_APP/Contents/Resources/Assets.car"
 
+# Re-sign: osacompile ad-hoc-signs the bundle it emits, but the icon
+# swap above changes bundle contents after that signature was sealed,
+# so the Sealed Resources osacompile recorded no longer match reality.
+# Left unfixed, this makes Gatekeeper report "a sealed resource is
+# missing or invalid" — the "Install Nagi.app is damaged" dialog with
+# no GUI bypass, confirmed on a real downloaded-via-browser .dmg. Ad-hoc
+# ("-") to match build-app.sh's default; CODESIGN_IDENTITY isn't
+# threaded through here since this bundle carries no compiled code of
+# its own to protect, just needs a signature that matches its current
+# contents.
+codesign --force --sign - "$OUT_APP"
+
 echo "Done: $OUT_APP"

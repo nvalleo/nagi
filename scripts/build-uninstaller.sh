@@ -45,4 +45,15 @@ rm -f "$OUT_APP/Contents/Resources/Assets.car"
 # template already provides.
 swiftc -O -o "$OUT_APP/Contents/Resources/nagi-tis-disable" "$SCRIPT_DIR/dmg/nagi-tis-disable.swift"
 
+# Re-sign: osacompile ad-hoc-signs the bundle it emits, but the icon
+# swap and nagi-tis-disable addition above change bundle contents after
+# that signature was sealed, so the Sealed Resources osacompile recorded
+# no longer match reality. Left unfixed, this makes Gatekeeper report "a
+# sealed resource is missing or invalid" — an "is damaged" dialog with
+# no GUI bypass (found via Install Nagi.app's build script sharing this
+# exact bug, confirmed on a real downloaded-via-browser .dmg — this
+# script was never actually exercised through a real download before
+# that). Ad-hoc ("-") to match build-app.sh's default.
+codesign --force --sign - "$OUT_APP"
+
 echo "Done: $OUT_APP"

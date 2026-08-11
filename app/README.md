@@ -136,11 +136,16 @@ ID) behind this repo, so macOS's Gatekeeper will block the first open of
 dialog), or System Settings → Privacy & Security → "Open Anyway" after
 the first blocked attempt. If neither offers an "Open" option (recent
 macOS sometimes shows "is damaged" instead, with no GUI bypass — also
-raised in the thread linked above), strip the quarantine attribute by
-hand: `xattr -cr "/Volumes/Nagi <version>/Install Nagi.app"`. Nagi.app
-itself doesn't need this dance — `Install Nagi.app` strips its
-quarantine attribute automatically before opening it (see above). This
-is the same tradeoff another solo-dev
+raised in the thread linked above, and confirmed on a real download via
+a Chromium-based browser: the "is damaged" dialog's "Move to Trash"
+button ejects the mounted `.dmg` along with it, so any fallback that
+assumes the volume is still mounted is a dead end), strip the
+quarantine attribute from the downloaded `.dmg` file itself, before
+(re) opening it — not from anything inside the already-mounted volume:
+`xattr -cr ~/Downloads/Nagi-<version>.dmg`. Nagi.app itself doesn't need
+this dance — `Install Nagi.app` strips its quarantine attribute
+automatically before opening it (see above). This is the same tradeoff
+another solo-dev
 macOS IME, [SwiftyGyaim](https://github.com/tanabe1478/SwiftyGyaim),
 makes for the same reason. A signed and notarized DMG (matching
 macSKK/AquaSKK/azooKey-Desktop, all surveyed on #30) is still on the
