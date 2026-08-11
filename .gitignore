@@ -16,10 +16,13 @@ DerivedData/
 .swiftpm/
 Package.resolved
 
-# M4: unsigned .dmg output (scripts/build-dmg.sh, #25 install/uninstall
-# follow-up) — built locally / attached to GitHub Releases, not
-# vendored.
-.build-dmg/
+# M4: ad-hoc signed .zip release output (scripts/build-release-zip.sh,
+# #25/#30 install/uninstall follow-up) — built locally / attached to
+# GitHub Releases, not vendored. Formerly a .dmg (.build-dmg/); replaced
+# after real-machine testing found Gatekeeper has no GUI bypass at all
+# for an ad-hoc signed, quarantined app on macOS 15+ — see
+# scripts/install-nagi.sh's header for the full story.
+.build-release/
 
 # Vendored Mozc protobufs (regenerated locally)
 poc/Sources/NagiMozcProto/Generated/

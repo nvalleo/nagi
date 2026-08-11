@@ -69,8 +69,12 @@ correctly whether Nagi.app ends up at `~/Library/Input Methods/` or
 machine: `launchctl print` on the registered service shows `managed_by =
 com.apple.xpc.ServiceManagement` (absent under the old manual-bootstrap
 approach) and the correct bundle-relative `program identifier`. This is
-what made dropping the custom installer for `scripts/build-dmg.sh`
-possible — see app/README.md's "Prebuilt download (.dmg)".
+what made dropping a custom installer *package* possible in the first
+place — see app/README.md's "Prebuilt install (curl one-liner)" (the
+prebuilt distribution channel itself moved from a `.dmg` to a curl
+one-liner later, for unrelated Gatekeeper reasons unpacked in that
+section — this LaunchAgent self-registration piece is unaffected
+either way).
 
 **One caveat, found during the #33 follow-up below:** `register()`
 reporting `.enabled` does not mean the job is loaded into launchd for
