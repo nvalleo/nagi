@@ -93,6 +93,17 @@ CONVERTER_LABEL="com.nvleo.inputmethod.nagi.Converter"
 echo "Stopping $CONVERTER_LABEL (if running) ..."
 launchctl bootout "gui/$(id -u)/$CONVERTER_LABEL" >/dev/null 2>&1 || true
 
+# Reset the one-shot "log out and back in" prompt (FirstRunPrompt.swift)
+# so a later reinstall shows it again instead of staying permanently
+# silent. It's keyed off a plain `UserDefaults` flag, deliberately
+# independent of any registration state that survives this uninstall
+# (see that file's doc comment) — which also means, without this,
+# nothing else would ever clear it: `~/Library/Preferences/` isn't
+# touched by removing the app bundle above (#32 follow-up, found the
+# same way #32 itself was — a stale flag surviving an uninstall).
+echo "Resetting the first-run \"log out\" prompt ..."
+defaults delete com.nvleo.inputmethod.nagi FirstRunLogoutPromptShown >/dev/null 2>&1 || true
+
 # Best-effort: clear the Input Sources entry too, same as the GUI
 # uninstaller. Compiled on the fly rather than checked in as a binary —
 # not fatal if swiftc isn't available (e.g. Xcode Command Line Tools
