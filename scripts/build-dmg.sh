@@ -20,27 +20,37 @@
 # makes dropping the installer possible at all.
 #
 # The one accommodation an Input Method needs that a normal app doesn't:
-# it has to land in /Library/Input Methods/, not /Applications/. This
-# DMG's "drop target" is a symlink to that folder instead of the usual
-# Applications alias — same drag-and-drop gesture, same
-# Finder-handles-the-admin-prompt behavior when dropping into a
-# root-owned folder, just a different destination. (System-wide, not
-# ~/Library/Input Methods/, because a symlink baked into a DMG at build
-# time can't point into an arbitrary future user's home directory —
-# scripts/install-ime.sh's per-user default remains available for
-# anyone building from source instead.)
+# it has to land in /Library/Input Methods/, not /Applications/. An
+# earlier version of this script handled that with a symlink to that
+# folder as the drop target, same idea as the usual Applications alias
+# — but real-machine testing (#30 follow-up) found that Finder's
+# drag-and-drop only escalates to an admin password prompt for a fixed
+# allowlist of destinations (Applications, Applications/Utilities,
+# Desktop, a handful of Library subfolders); a drop onto an alias/symlink
+# pointing anywhere else, /Library/Input Methods included, is silently
+# blocked by system policy instead — no error, no password prompt, the
+# app just doesn't get copied (see
+# https://developer.apple.com/forums/thread/712148). A README fix alone
+# wasn't good enough here (most people don't read the README before
+# dragging), so the drop target is gone: see "Install Nagi.app" below,
+# which sidesteps the policy entirely rather than working around it.
+# (System-wide only, not ~/Library/Input Methods/ — scripts/install-ime.sh's
+# per-user default remains available for anyone building from source
+# instead.)
 #
-# Also carries a top-level "Uninstall Nagi.app" (#30 follow-up, see
-# build-uninstaller.sh) — a double-clickable uninstaller for the same
-# audience this DMG targets: people without a Terminal, who can't run
-# scripts/uninstall-ime.sh themselves. This copy is a fallback only:
-# Nagi.app embeds its own copy and deploys it to /Applications/ on
-# first launch (#33, UninstallerDeployment.swift) — one drag
-# (Nagi.app → Input Methods) is all installing takes, same as any other
-# Mac app, no second drag for the uninstaller. The copy here exists for
-# the case Nagi.app never got to run at all (e.g. Gatekeeper blocked it
-# and the user gave up before getting past that) — run it straight from
-# the mounted .dmg in that case.
+# Just two things at the top level: Nagi.app and Install Nagi.app
+# (#30 follow-up, see build-installer.sh). No bundled README.txt, no
+# bundled fallback "Uninstall Nagi.app" — a straight "two files, drag
+# one, click the other" DMG stays legible without either. Nagi.app
+# itself embeds its own copy of the uninstaller and deploys it to
+# /Applications/ on first launch regardless (#33,
+# UninstallerDeployment.swift), so the normal uninstall path is
+# unaffected; what's genuinely lost by leaving the DMG-level fallback
+# out is a GUI uninstall option for the one case where Nagi.app never
+# managed to launch at all (e.g. Gatekeeper blocked Install Nagi.app
+# itself and the user gave up) — that case falls back to removing
+# /Library/Input Methods/Nagi.app by hand in Finder, or
+# scripts/uninstall-ime.sh for anyone who cloned the repo.
 #
 # Usage: build-dmg.sh
 #
@@ -51,16 +61,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-DMG_RESOURCES="$SCRIPT_DIR/dmg"
 
-# build-app.sh already calls build-uninstaller.sh itself (to embed a
-# copy — see above), which leaves a fresh top-level .build-app/Uninstall
-# Nagi.app as a side effect; reused as-is for the .dmg's own fallback
-# copy rather than building it a second time.
 "$SCRIPT_DIR/build-app.sh" release
+"$SCRIPT_DIR/build-installer.sh"
 
 APP_BUNDLE="$REPO_ROOT/.build-app/Nagi.app"
-UNINSTALLER_APP="$REPO_ROOT/.build-app/Uninstall Nagi.app"
+INSTALLER_APP="$REPO_ROOT/.build-app/Install Nagi.app"
 VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_BUNDLE/Contents/Info.plist")"
 
 OUT_DIR="$REPO_ROOT/.build-dmg"
@@ -71,9 +77,17 @@ echo "Staging DMG contents ..."
 STAGING="$WORK_DIR/staging"
 mkdir -p "$STAGING"
 cp -R "$APP_BUNDLE" "$STAGING/Nagi.app"
-cp -R "$UNINSTALLER_APP" "$STAGING/Uninstall Nagi.app"
-ln -s "/Library/Input Methods" "$STAGING/Input Methods"
-cp "$DMG_RESOURCES/README.txt" "$STAGING/README.txt"
+cp -R "$INSTALLER_APP" "$STAGING/Install Nagi.app"
+
+# Hide the staged Nagi.app from Finder — it has to be right next to
+# "Install Nagi.app" for that installer's `dirname`-relative lookup to
+# find it (see Install Nagi.applescript), but a real, identically-named,
+# identically-iconed Nagi.app sitting in the same window as the
+# installer invites double-clicking the wrong one, which would run Nagi
+# straight off the read-only mounted volume instead of installing it.
+# `chflags hidden` (not a dot-prefixed rename) so the installer's path
+# lookup doesn't need to change to match.
+chflags hidden "$STAGING/Nagi.app"
 
 mkdir -p "$OUT_DIR"
 OUT_DMG="$OUT_DIR/Nagi-$VERSION.dmg"
@@ -90,6 +104,8 @@ hdiutil create \
 echo
 echo "Done: $OUT_DMG"
 echo
-echo "Unsigned, unnotarized — first open of Nagi.app will show a"
-echo "Gatekeeper warning. See scripts/dmg/README.txt (bundled in the"
-echo "DMG) for the Control-click / xattr workaround."
+echo "Unsigned, unnotarized — \"Install Nagi.app\" strips the quarantine"
+echo "attribute itself before opening Nagi.app, so this doesn't surface"
+echo "as a Gatekeeper prompt during that flow. Install Nagi.app itself"
+echo "still shows one (it's unsigned too) — see app/README.md's"
+echo "\"Prebuilt download\" section for the Control-click / xattr fallback."
