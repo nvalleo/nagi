@@ -18,11 +18,35 @@ mark (an earlier three-stroke version of app-icon.svg looked like a
 different icon once shrunk down to badge size, which defeats the point of
 a badge — see issue #25) — only the canvas and stroke weight scale up.
 
-Badge geometry (dark rounded-square background nearly filling the frame,
-bold white glyph) intentionally matches Apple's own IME mode icons —
-confirmed against /System/Library/Input Methods/JapaneseIM-RomajiTyping.app
-and AinuIM.app's own Hiragana.tiff/Ainu.tiff, both dark badge + white glyph,
-not a transparent template image.
+Badge geometry (rounded-square badge nearly filling the frame, with the
+sun + wave mark cut out of it as transparent holes, not painted on top of
+it) intentionally matches Apple's own IME mode icons — confirmed against
+/System/Library/Input Methods/JapaneseIM-RomajiTyping.app and AinuIM.app's
+own Hiragana.tiff/Ainu.tiff. Both are read under `TISIconIsTemplate =
+true` (see Info.plist — needed for CustomIcon below, the Input Sources
+list row's icon, to render at all), which is a bundle-wide flag: the
+system discards all RGB and repaints using only alpha as a mask. An
+earlier version of this file got that backwards — filled the badge shape
+*and* painted an opaque colored glyph on top of it, i.e. alpha==1 across
+virtually the whole frame — which the real machine renders as an
+undifferentiated solid-tinted square: the glyph's outline needs to *be*
+alpha, not color, or its shape carries no information after tinting
+(issue #35 follow-up, where nagi.tiff's real-machine appearance was
+finally checked against this, rather than just checked for visual
+correctness in isolation). Dropping TISIconIsTemplate entirely instead
+(to keep this file's real color, Google 日本語入力-style) was also tried
+— broke the list row's CustomIcon without fixing the menu bar badge
+either; reverted. Unlike the list row (which re-reads its icon live —
+every asset swap during that investigation showed up there immediately,
+no logout needed), the menu bar badge stayed blank regardless of what
+was tried here, for a reason unrelated to color/alpha at all: a changed
+icon for an already-registered Text Input Source only gets picked up by
+the menu bar at the next login (see InputSourceRegistration.swift) —
+relaunching Nagi or toggling other input sources doesn't do it. Confirmed
+working after a real logout/login, once this alpha-cutout redraw was
+combined with correct HiDPI tagging (scripts/icons/mktiff.swift, replacing
+`tiffutil -cathidpicheck` which never tagged the 2x representation as
+HiDPI at all — see that script's header).
 
 Palette ("Twilight Navy", picked over three other options — see issue #25):
   ink       #14202E  background, top of the vertical gradient
@@ -120,7 +144,18 @@ def template_icon_svg():
 
 def badge_svg():
     # Designed at 256 canvas, downsampled to 32/16 for crisp anti-aliasing.
-    # Same two-stroke mark as app-icon.svg — see module docstring.
+    # Same two-stroke mark as app-icon.svg, but knocked *out* of the badge
+    # rather than painted on top of it — an SVG mask draws the badge shape
+    # in mask-white (kept opaque) and the sun + waves in mask-black
+    # (punched to fully transparent) so the compound alpha channel itself
+    # carries the glyph, matching AinuIM.app's own Ainu.tiff byte-for-byte
+    # in structure (#35 follow-up — TISIconIsTemplate=true, which the
+    # Input Sources list row's CustomIcon needs, discards this file's
+    # color and repaints from alpha alone; a plain opaque colored badge
+    # rendered as an undifferentiated solid-tinted blob under that flag).
+    # The fill color below (INK) never reaches the screen once tinted,
+    # but a real color beats an arbitrary black/white choice for anyone
+    # opening this file directly (Xcode SVG preview, `open badge.svg`, ...).
     size = 256
     r = 40
     cx = size / 2
@@ -130,10 +165,15 @@ def badge_svg():
     w2 = wave_path(cx, 202, 168, 7, 1.0, samples=40)
 
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">
-  <rect x="0" y="0" width="{size}" height="{size}" rx="{r}" ry="{r}" fill="{INK}"/>
-  <circle cx="{cx}" cy="{sun_cy}" r="{sun_r}" fill="{GOLD}"/>
-  <path d="{w1}" fill="none" stroke="{PALE}" stroke-width="22" stroke-linecap="round"/>
-  <path d="{w2}" fill="none" stroke="{PALE}" stroke-width="22" stroke-linecap="round"/>
+  <defs>
+    <mask id="knockout" maskUnits="userSpaceOnUse" x="0" y="0" width="{size}" height="{size}">
+      <rect x="0" y="0" width="{size}" height="{size}" rx="{r}" ry="{r}" fill="#ffffff"/>
+      <circle cx="{cx}" cy="{sun_cy}" r="{sun_r}" fill="#000000"/>
+      <path d="{w1}" fill="none" stroke="#000000" stroke-width="26" stroke-linecap="round"/>
+      <path d="{w2}" fill="none" stroke="#000000" stroke-width="26" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <rect x="0" y="0" width="{size}" height="{size}" rx="{r}" ry="{r}" fill="{INK}" mask="url(#knockout)"/>
 </svg>
 '''
 

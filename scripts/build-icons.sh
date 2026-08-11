@@ -75,7 +75,11 @@ iconutil -c icns "$UNINSTALLER_ICONSET" -o "$WORK_DIR/Uninstall-Nagi.icns"
 echo "Rendering nagi.tiff (menu bar / input-source list, 1x + 2x of a 16pt icon)..."
 rasterize "$ICONS_DIR/src/badge.svg" "$WORK_DIR/badge-16.tiff" 16
 rasterize "$ICONS_DIR/src/badge.svg" "$WORK_DIR/badge-32.tiff" 32
-tiffutil -cathidpicheck "$WORK_DIR/badge-16.tiff" "$WORK_DIR/badge-32.tiff" -out "$WORK_DIR/nagi.tiff"
+# mktiff.swift, not `tiffutil -cathidpicheck` — the latter concatenates
+# the two representations but doesn't tag the 2x one as HiDPI (both end
+# up at 72 dpi instead of the 2x rep reading 144 dpi), confirmed against
+# AinuIM.app's own Ainu.tiff (#35 follow-up).
+swift "$ICONS_DIR/mktiff.swift" "$WORK_DIR/nagi.tiff" 16 "$WORK_DIR/badge-16.tiff" "$WORK_DIR/badge-32.tiff"
 
 echo "Rendering Nagi-template.pdf (TISIconLabels > CustomIcon — the glyph System Settings' Input Sources list itself uses, #30 follow-up)..."
 swift "$ICONS_DIR/svg2pdf.swift" "$ICONS_DIR/src/template-icon.svg" "$WORK_DIR/Nagi-template.pdf" 32

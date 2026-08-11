@@ -80,7 +80,27 @@
 	     separate asset (Nagi-template.pdf) from nagi.tiff's colored
 	     badge, which remains what the menu bar Input menu uses. Without
 	     this, Nagi's row fell back to some generic system glyph instead
-	     of its own mark. -->
+	     of its own mark.
+
+	     #35 follow-up: dropping this flag entirely (to keep nagi.tiff's
+	     real color in the menu bar, Google 日本語入力-style — it sets
+	     neither this nor CustomIcon) was tried on real hardware. Broke
+	     the list row above back to a blank icon without fixing the menu
+	     bar badge, which stayed blank regardless — so keep this flag.
+	     This list row itself re-reads its icon live — every asset swap
+	     during that investigation (re-signing + relaunching Nagi, no
+	     logout) was reflected here immediately, working or broken. The
+	     menu bar badge is the one that didn't: unrelated to this flag or
+	     nagi.tiff's format, it turned out to need an actual login, like
+	     every other Text Input Source change in this app (see
+	     InputSourceRegistration.swift's file header) — a *changed* icon
+	     for an *already-registered* source doesn't get picked up by
+	     relaunching Nagi or toggling other input sources, only by the
+	     next login. Confirmed on real hardware — the menu bar badge
+	     rendered correctly after a real logout/login, once nagi.tiff was
+	     redrawn as an alpha-cutout matching AinuIM.app's own Ainu.tiff
+	     (see scripts/icons/generate.py) with
+	     correct HiDPI tagging (scripts/icons/mktiff.swift). -->
 	<key>TISIconIsTemplate</key>
 	<true/>
 	<!-- M1 is a single romaji->hiragana mode, on purpose — no katakana /
