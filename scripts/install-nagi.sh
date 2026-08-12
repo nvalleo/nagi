@@ -30,7 +30,12 @@
 set -euo pipefail
 
 REPO="nv-leo/nagi"
-ZIP_URL="https://github.com/$REPO/releases/latest/download/Nagi.zip"
+# Overridable for testing against a pre-release (GitHub's own
+# releases/latest/download/ redirect skips anything marked
+# "Pre-release", so it 404s until a release is promoted to Latest):
+#   NAGI_ZIP_URL="https://github.com/nv-leo/nagi/releases/download/vX.Y.Z/Nagi.zip" \
+#     curl -fsSL .../install-nagi.sh | bash
+ZIP_URL="${NAGI_ZIP_URL:-https://github.com/$REPO/releases/latest/download/Nagi.zip}"
 DEST_DIR="/Library/Input Methods"
 DEST="$DEST_DIR/Nagi.app"
 
