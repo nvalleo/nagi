@@ -17,10 +17,11 @@
 // succeeds without a password prompt (confirmed — this is also why
 // Finder never prompts when *you* drag an app into Applications).
 //
-// The .dmg still carries its own top-level copy of Uninstall Nagi.app
-// too, as a fallback for the case Nagi.app never got to run at all
-// (e.g. Gatekeeper blocked it and the user gave up before getting past
-// that) — see scripts/build-dmg.sh.
+// If Nagi.app never gets to run at all (e.g. scripts/install-nagi.sh
+// fails partway through), this deployment step never runs and there's
+// no GUI fallback for it — remove /Library/Input Methods/Nagi.app by
+// hand in Finder instead, or use scripts/uninstall-ime.sh from a clone
+// of the repo (see app/README.md's "Prebuilt install" section).
 
 import Foundation
 import os
