@@ -27,17 +27,35 @@ IMKit のスケルトンをシステム設定に登録し、TextEdit にテキ�
 
 `.build-app/Nagi.app`を生成する（デフォルトで ad-hoc 署名。`security find-identity`のハッシュを`CODESIGN_IDENTITY`に設定すれば実署名も可能 — 必須ではなく、ad-hoc で十分動作する）。
 
-## ビルド済み配布（.dmg）
+## ビルド済みインストール（curl ワンライナー）
 
-フルの開発環境（Xcode、Bazel、...— 上記「ビルド」参照）なしで Nagi を試したい場合: `scripts/build-dmg.sh`がビルド済みの`Nagi.app`を、ドラッグ＆ドロップだけで使えるプレーンな`.dmg`にパッケージングする — 中身はアプリのみ、インストーラーパッケージはなし。[最新の GitHub Release](https://github.com/nv-leo/nagi/releases/latest) に添付済み。自分でビルドする場合:
+フルの開発環境（Xcode、Bazel、...— 上記「ビルド」参照）なしで Nagi を試したい場合:
 
 ```sh
-./scripts/build-dmg.sh   # -> .build-dmg/Nagi-<version>.dmg
+curl -fsSL https://github.com/nv-leo/nagi/releases/latest/download/install-nagi.sh | bash
 ```
 
-意図的に「アプリのみ」であり、`.pkg`／カスタムインストーラーではない — 署名・公証済みで、アプリだけが入っていて、ユーザーが好きな場所にドラッグできる DMG というのが、大手企業のインストーラーの外側で見ると、個人／小規模チームの macOS 開発者が実際に収斂している標準だから（#30 で議論、[この r/opensource のスレッド](https://www.reddit.com/r/opensource/comments/1ku0zv0/) のご指摘に感謝 — このセクションの以前のバージョンは`.pkg`を指していた）。唯一必要な配慮: Nagi は`/Applications/`ではなく`/Library/Input Methods/`に置かれる必要があるため、`Nagi.app`のドロップ先は通常の Applications エイリアスではなく、そのフォルダへのシンボリックリンクになっている。とはいえドラッグは 1 回だけで、`Uninstall Nagi.app`用に 2 回目のドラッグを求めることはない（#33 フォローアップ）: `Nagi.app`が自分自身の中にそのコピーを同梱していて、初回起動時に自分で`/Applications/`へ配置する（`app/Sources/Nagi/UninstallerDeployment.swift`）— 下記の`NagiConverter`や Text Input Source の自己登録と同じ仕組み。`/Applications/`への書き込みは`/Library/Input Methods/`と違って root 権限不要（`root:admin`でグループ書き込み可能、自分でアプリをドラッグしたときに Finder が認証を求めないのと同じ理由）なので、手順 1 で既に求められる以上の権限ダイアログは出ない。`.dmg`自体にも同じ`Uninstall Nagi.app`のコピーがトップレベルに入っているが、これは`Nagi.app`が一度も起動できなかった場合（Gatekeeper にブロックされて諦めた等）の予備。カスタムインストーラーを不要にできた理由: `Nagi.app`は初回起動時に`SMAppService`経由で自分自身の`NagiConverter` LaunchAgent を登録するようになった（`app/Sources/Nagi/ConverterServiceRegistration.swift`参照）ほか、M4 の #30 フォローアップとして、自分自身を Text Input Source として登録するようにもなった（`app/Sources/Nagi/InputSourceRegistration.swift`、下記「登録されるまで」参照）— もはやインストーラースクリプトがそのどちらも代行する必要はない。ただしどちらも、実際に使えるようになるのは次回ログイン時からで（同じく下記「登録されるまで」参照）、フルの reboot は不要になったものの即時ではない。
+`scripts/install-nagi.sh`が最新リリースの`Nagi.zip`をダウンロードし、展開して`/Library/Input Methods/`にインストールし（管理者パスワードを 1 回求める — システムフォルダのため）、Nagi を起動する。スクリプトの中身を確認してから実行したい場合は、ダウンロード→確認→実行という流れも可能:
 
-**未署名 — このリポジトリの背後に Apple Developer Program のメンバーシップ（Developer ID）は存在しないため、macOS の Gatekeeper が`Nagi.app`の初回起動をブロックする。** Nagi.app を Control-click → 開く → 開く（ダイアログでもう一度）、または初回のブロック後にシステム設定 → プライバシーとセキュリティ → 「このまま開く」。どちらも「開く」の選択肢が出ない場合（最近の macOS では代わりに「壊れている」と表示され、GUI での回避手段がないことがある — 上記スレッドでも指摘あり）、quarantine 属性を手動で剥がす: `xattr -cr "/Library/Input Methods/Nagi.app"`。このフォールバックを含む完全な手順は`scripts/dmg/README.txt`（DMG 内に同梱）にある。これは同じく個人開発の macOS IME である[SwiftyGyaim](https://github.com/tanabe1478/SwiftyGyaim) が同じ理由で行っているのと同じトレードオフ。署名・公証済み DMG（macSKK/AquaSKK/azooKey-Desktop に合わせる、いずれも#30 で調査済み）はまだ roadmap（M4）上にある — 有償の Developer ID が先に必要。
+```sh
+curl -fsSLO https://github.com/nv-leo/nagi/releases/latest/download/install-nagi.sh
+less install-nagi.sh
+bash install-nagi.sh
+```
+
+この`Nagi.zip`を生成するのは`scripts/build-release-zip.sh`（`ditto`を使用 — 単純な`zip`と違い、署名済み`.app`バンドルが zip 往復後も保つべきもの、つまり拡張属性・リソースフォーク・コード署名自体を壊さずに保持できる）。
+
+### なぜ`.dmg`ではないのか
+
+このセクションの以前のバージョンでは、ドラッグ＆ドロップの`.dmg`を配布していた（#30 で議論、[この r/opensource のスレッド](https://www.reddit.com/r/opensource/comments/1ku0zv0/) のご指摘に感謝 — さらに前は`.pkg`案だった）。最初は`Nagi.app`を`/Library/Input Methods/`へのシンボリックリンクにドラッグする方式、その後、実機検証で Finder のドラッグ＆ドロップが管理者パスワードダイアログへエスカレーションするのは固定の許可リストに限られ、それ以外へのドロップはサイレントに失敗すると判明した（[この Apple Developer Forums のスレッド](https://developer.apple.com/forums/thread/712148) 参照）ため、ダブルクリックで完結する`Install Nagi.app`インストーラー方式に切り替えた。しかしどちらも、さらなる実機検証（今度はローカルビルドではなく実際のブラウザダウンロード経由）で、回避不能な壁にぶつかって断念した:
+
+**このリポジトリの背後に Apple Developer Program のメンバーシップ（Developer ID）は存在しないため、Nagi が配布するものはすべて ad-hoc 署名（`codesign --sign -`）であり、Developer ID 署名でも公証済みでもない。macOS 15（Sequoia）以降 — 26（Tahoe）を含む — では、quarantine 済みの *ad-hoc 署名* アプリに対して Gatekeeper に GUI での回避手段が一切存在しない。** Developer ID 署名・未公証のアプリなら見慣れた「開発元を確認できません」というバイパス可能なプロンプトが出るが、ad-hoc 署名の場合は違う。代わりに macOS は`"<app>"は壊れているため開けません`と表示し、選択肢は「ゴミ箱に入れる」のみ。Control-click → 開く は何も起こさず、システム設定 → プライバシーとセキュリティにも「このまま開く」ボタンは現れない — Gatekeeper がブロックした評価そのものを記録しないため、上書き許可の選択肢を提示しようがない。（ダウンロードした`.dmg`に付く quarantine フラグが、マウント時に`quarantine`マウントオプションを付与させる原因であり、それがボリューム内のすべての ad-hoc 署名アプリを起動不能にする。`.dmg`を開く前に`xattr -d com.apple.quarantine`で手動で剥がせば回避できるが、これも結局 Terminal を使う手順であり、ドラッグ＆ドロップ／ダブルクリックのインストーラーが目指していたものを損なう。）
+
+curl はブラウザと違い、ダウンロードしたものに`com.apple.quarantine`を付与しない。そのため`install-nagi.sh`は配布経路のレベルで問題自体を回避する: 取得するものが一切 quarantine されないので、上記の ad-hoc／未公証の壁がそもそも発動せず、`xattr`での回避策すら不要になる — `.dmg`方式では避けられなかったあの 1 行すら必要ない。これは同じく個人開発の macOS IME である[SwiftyGyaim](https://github.com/tanabe1478/SwiftyGyaim) が同じ理由で行っているのと同じ署名面のトレードオフ。Developer ID 署名・公証済みのリリース（macSKK/AquaSKK/azooKey-Desktop に合わせる、いずれも#30 で調査済み）はまだ roadmap（M4）上にある — 有償の Developer ID が先に必要。
+
+ワンライナーでのインストール（ソースからのビルドと違って）を可能にしているもの: `Nagi.app`は初回起動時に`SMAppService`経由で自分自身の`NagiConverter` LaunchAgent を登録するようになった（`app/Sources/Nagi/ConverterServiceRegistration.swift`参照）ほか、M4 の #30 フォローアップとして自分自身を Text Input Source として登録し（`app/Sources/Nagi/InputSourceRegistration.swift`、下記「登録されるまで」参照）、`Uninstall Nagi.app`を`/Applications/`へ自分で配置する（#33 フォローアップ、`app/Sources/Nagi/UninstallerDeployment.swift`）— このいずれもインストーラースクリプト側で代行する必要はない。ただしこの 3 つとも、実際に使えるようになるのは次回ログイン時からで（同じく下記「登録されるまで」参照）、フルの reboot は不要になったものの即時ではない。
+
+**`install-nagi.sh`自体が途中で失敗した場合**（例: ダウンロード中にネットワークが切れた）、Nagi はインストールされておらず片付けるものも無い — ワンライナーを再実行すればよい。`Nagi.app`の配置後、Nagi が一度も起動する前に失敗した場合は、`Uninstall Nagi.app`も`/Applications/`へ配置されない — その場合は Finder で`/Library/Input Methods/Nagi.app`を手動削除するか、リポジトリを clone した人なら`scripts/uninstall-ime.sh`を使うこと。
 
 ## インストール（ソースから）
 
@@ -62,11 +80,11 @@ IMKit のスケルトンをシステム設定に登録し、TextEdit にテキ�
 ./scripts/uninstall-ime.sh --all            # 両方
 ```
 
-上記の`.dmg`経由でインストールした場合は`/Library/Input Methods/`なので`--system`を使うこと。
+上記の curl ワンライナー経由でインストールした場合は`/Library/Input Methods/`なので`--system`を使うこと — あるいは Applications フォルダの`Uninstall Nagi.app`をダブルクリックすれば Terminal 不要（上記「ビルド済みインストール」参照）。
 
 `Nagi.app`を削除し、`NagiConverter` LaunchAgent を停止し、システム設定の入力ソースから Nagi のエントリも消す — 手動操作も reboot も不要（#33: `scripts/dmg/nagi-tis-disable.swift`をその場でコンパイル・実行している、GUI 版`Uninstall Nagi.app`と同じヘルパー）。`swiftc`（Xcode Command Line Tools）が必要で、それが無い場合は入力ソースのエントリが以前の挙動（切り替え不可のまま残留、reboot 不要で消すにはシステム設定 > キーボード > 入力ソース > 編集... > 「ひらがな (Nagi)」を選択 > 「−」、または reboot）にフォールバックする。`uninstall-ime.sh`自体は#30 のインストール/アンインストール対応まで存在しなかった — `install-ime.sh`にはそれまで対になるスクリプトがなかった。
 
-**未検証（#30）: `NagiConverter`も同様にシステム設定 > 一般 > ログイン項目に残る可能性がある。** `SMAppService`によってアプリ内部から登録されており、このスクリプトが書き込んだ plist ファイルではないため、削除すべきファイルがそもそも存在しない — このスクリプトにできるのは実行中のジョブを`launchctl bootout`することだけで、`SMAppService.unregister()`に相当する処理は呼べない。アンインストール後にそこへ「Nagi」という古いエントリが残っていた場合、それが原因と考えられる。手動で削除する（上記の入力ソースと同じ「−」／右クリック操作）のが想定される対処法だが、実際の再インストール/アンインストールサイクルではまだ検証していない。
+**検証済み（#30 フォローアップ）: `NagiConverter`はシステム設定 > 一般 > ログイン項目に目に見えるゴーストエントリを残さない。** `SMAppService`によってアプリ内部から登録されており、このスクリプトが書き込んだ plist ファイルではないため、削除すべきファイルがそもそも存在しない — このスクリプトにできるのは実行中のジョブを`launchctl bootout`することだけで、`SMAppService.unregister()`に相当する処理は呼べない（このメソッドは登録元アプリ自身の実行中プロセスからしか呼べないインスタンスメソッドで、外部スクリプトが他アプリの`SMAppService`登録を解除できる公開 API は存在しない）。開発機で確認済み: アンインストール直後は`Nagi`・`NagiConverter`とも`sfltool dumpbtm`レベルでは一時的に残存していた（`Nagi`は`disabled`に、`NagiConverter`は`enabled`のまま）が、システム設定のログイン項目 UI 上には一度も表示されず、手動操作なしで数分以内に`dumpbtm`の出力からも消えた。ユーザーに見える形での残留は確認されなかった。
 
 ## Exit criterion
 

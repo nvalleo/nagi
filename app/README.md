@@ -60,68 +60,98 @@ Produces `.build-app/Nagi.app` (ad-hoc signed by default; set
 `CODESIGN_IDENTITY` to a `security find-identity` hash to sign with a
 real identity instead — not required, ad-hoc works fine).
 
-## Prebuilt download (.dmg)
+## Prebuilt install (curl one-liner)
 
 For trying Nagi out without a full dev environment (Xcode, Bazel, ... —
-see "Build" above): `scripts/build-dmg.sh` packages a built `Nagi.app`
-into a plain drag-and-drop `.dmg` — just the app, no installer package.
-Attached to the [latest GitHub
-Release](https://github.com/nv-leo/nagi/releases/latest); to build one
-locally instead:
+see "Build" above):
 
 ```sh
-./scripts/build-dmg.sh   # -> .build-dmg/Nagi-<version>.dmg
+curl -fsSL https://github.com/nv-leo/nagi/releases/latest/download/install-nagi.sh | bash
 ```
 
-Deliberately just the app, not a `.pkg`/custom installer — a signed and
-notarized DMG containing nothing but the app, that the user drags
-wherever they want, is what solo/small-team macOS developers converge on
-as the actual standard once you look past the big corporate installers
-(discussed on #30, credit to
-[this r/opensource thread](https://www.reddit.com/r/opensource/comments/1ku0zv0/)
-for the correction — an earlier version of this section pointed at a
-`.pkg` instead). The one accommodation still needed: Nagi has to land in
-`/Library/Input Methods/`, not `/Applications/`, so `Nagi.app`'s drop
-target in the DMG is a symlink to that folder instead of the usual
-Applications alias. That's still only one drag, though — the DMG isn't
-asking for a second one to place `Uninstall Nagi.app` too (#33
-follow-up): Nagi.app embeds a copy of it and deploys it to
-`/Applications/` itself on first launch
-(`app/Sources/Nagi/UninstallerDeployment.swift`), the same way it
-already self-registers `NagiConverter` and the Text Input Source below.
-Writing to `/Applications/` doesn't need admin privileges the way
-`/Library/Input Methods/` does (it's `root:admin`, group-writable, same
-reason Finder never prompts when *you* drag a normal app there), so
-this needs no extra permission dialog beyond the one already required
-for step 1. The DMG still carries its own top-level copy of `Uninstall
-Nagi.app` too, purely as a fallback for the case Nagi.app never got to
-run at all (e.g. Gatekeeper blocked it and the user gave up before
-getting past that). What made dropping the custom installer possible at
-all in the first place: Nagi.app
-now registers its own `NagiConverter` LaunchAgent via `SMAppService` the
-first time it runs (see
+`scripts/install-nagi.sh` downloads the latest release's `Nagi.zip`,
+unzips it, installs to `/Library/Input Methods/` (asking for your admin
+password once — a system folder), and launches Nagi. Prefer not to pipe
+a script straight into a shell without reading it first? Reasonable —
+download it, read it, then run it:
+
+```sh
+curl -fsSLO https://github.com/nv-leo/nagi/releases/latest/download/install-nagi.sh
+less install-nagi.sh
+bash install-nagi.sh
+```
+
+`scripts/build-release-zip.sh` produces the `Nagi.zip` this fetches
+(via `ditto`, which — unlike a plain `zip` — preserves what a
+code-signed `.app` bundle needs intact through a zip round-trip:
+extended attributes, resource forks, and the code signature itself).
+
+### Why not a `.dmg`
+
+An earlier version of this section shipped a drag-and-drop `.dmg`
+(discussed on #30, credit to [this r/opensource
+thread](https://www.reddit.com/r/opensource/comments/1ku0zv0/) for
+correcting an even earlier `.pkg`-based plan) — first with `Nagi.app`
+dragged onto a symlink to `/Library/Input Methods/`, then, after
+real-machine testing found Finder's drag-and-drop only escalates to an
+admin password prompt for a fixed allowlist of destinations and
+silently no-ops on anything else (see [this Apple Developer Forums
+thread](https://developer.apple.com/forums/thread/712148)), with a
+double-clickable `Install Nagi.app` installer instead. Both were
+abandoned after further real-machine testing (this time via an actual
+browser download, not just a locally-built `.dmg`) hit a dead end
+neither could work around:
+
+**There is no Apple Developer Program membership (Developer ID) behind
+this repo, so everything Nagi ships is ad-hoc signed
+(`codesign --sign -`), not Developer ID-signed, and not notarized. On
+macOS 15 (Sequoia) and later — 26 (Tahoe) included — Gatekeeper has no
+GUI bypass at all for a quarantined *ad-hoc signed* app**, unlike a
+Developer ID-signed-but-unnotarized one (which does get the familiar,
+bypassable "unidentified developer" prompt). Instead, macOS reports
+`"<app>" is damaged and can't be opened` and offers only "Move to
+Trash" — Control-click → Open does nothing, and no "Open Anyway" button
+appears in System Settings → Privacy & Security, because Gatekeeper
+never records a blocked assessment it could offer to override. (The
+quarantine flag on a downloaded `.dmg` is what makes macOS mount its
+volume with the `quarantine` mount option, which in turn is what makes
+every ad-hoc signed app inside it unlaunchable — clearing the flag by
+hand with `xattr -d com.apple.quarantine` before opening the `.dmg`
+does work around it, but that's a Terminal step either way, which
+defeats a drag-and-drop/double-click installer's entire point.)
+
+curl doesn't set `com.apple.quarantine` on what it downloads the way a
+browser does, so `install-nagi.sh` sidesteps the problem at the
+distribution-channel level instead: nothing it fetches ever gets
+quarantined, so the ad-hoc/notarization Gatekeeper wall above never
+triggers, and no `xattr` workaround is needed at all — not even the one
+line the `.dmg` approach couldn't avoid. This is the same signing
+tradeoff another solo-dev macOS IME,
+[SwiftyGyaim](https://github.com/tanabe1478/SwiftyGyaim), makes for the
+same reason. A Developer ID-signed and notarized release (matching
+macSKK/AquaSKK/azooKey-Desktop, all surveyed on #30) is still on the
+roadmap (M4) — it just needs a paid Developer ID first.
+
+What makes a one-line installer (as opposed to a from-source build)
+possible at all: Nagi.app registers its own `NagiConverter` LaunchAgent
+via `SMAppService` the first time it runs (see
 `app/Sources/Nagi/ConverterServiceRegistration.swift`), and — as of the
 M4 #30 follow-up — also registers itself as a Text Input Source
 (`app/Sources/Nagi/InputSourceRegistration.swift`, see "Getting
-registered" below) — no installer script needs to do either on its
-behalf anymore. Neither one takes effect until the next login, though
-(same "Getting registered" section) — not a full reboot, but not
-instant either.
+registered" below) and deploys its own `Uninstall Nagi.app` to
+`/Applications/` (#33 follow-up,
+`app/Sources/Nagi/UninstallerDeployment.swift`) — no installer script
+needs to do any of that on its behalf. None of the three takes effect
+until the next login, though (same "Getting registered" section) — not
+a full reboot, but not instant either.
 
-**Unsigned — there is no Apple Developer Program membership (Developer
-ID) behind this repo, so macOS's Gatekeeper will block the first open of
-Nagi.app.** Control-click Nagi.app → Open → Open (again, in the dialog),
-or System Settings → Privacy & Security → "Open Anyway" after the first
-blocked attempt. If neither offers an "Open" option (recent macOS
-sometimes shows "is damaged" instead, with no GUI bypass — also raised
-in the thread linked above), strip the quarantine attribute by hand:
-`xattr -cr "/Library/Input Methods/Nagi.app"`. Full steps, including
-this fallback, are in `scripts/dmg/README.txt`, bundled inside the DMG
-itself. This is the same tradeoff another solo-dev macOS IME,
-[SwiftyGyaim](https://github.com/tanabe1478/SwiftyGyaim), makes for the
-same reason. A signed and notarized DMG (matching macSKK/AquaSKK/
-azooKey-Desktop, all surveyed on #30) is still on the roadmap (M4) — it
-just needs a paid Developer ID first.
+**If `install-nagi.sh` itself fails partway through** (e.g. the network
+drops mid-download), Nagi never gets installed and there's nothing to
+clean up — rerun the one-liner. If it fails *after* copying Nagi.app
+into place but before Nagi ever launches, `Uninstall Nagi.app` never
+gets deployed to `/Applications/` either; remove
+`/Library/Input Methods/Nagi.app` by hand in Finder, or use
+`scripts/uninstall-ime.sh` from a clone of the repo, in that case.
 
 ## Install (from source)
 
@@ -168,8 +198,9 @@ just needs a paid Developer ID first.
 ./scripts/uninstall-ime.sh --all            # both
 ```
 
-Installed via the `.dmg` above? That's `/Library/Input Methods/`, so use
-`--system`.
+Installed via the curl one-liner above? That's `/Library/Input Methods/`,
+so use `--system` — or just double-click `Uninstall Nagi.app` in your
+Applications folder, no Terminal needed (see "Prebuilt install" above).
 
 Removes `Nagi.app`, stops the `NagiConverter` LaunchAgent, and clears
 Nagi's entry from System Settings' Input Sources — no manual step, no
@@ -183,15 +214,21 @@ System Settings > Keyboard > Input Sources > Edit... > select "ひらがな
 `uninstall-ime.sh` didn't exist until #30's install/uninstall
 follow-up — `install-ime.sh` had no counterpart before that.
 
-**Untested (#30): `NagiConverter` may similarly linger in System
-Settings > General > Login Items.** Since it's registered via
-`SMAppService` from inside the app rather than a plist this script
-writes, there's no file left to delete that cleanup — this script can
-only `launchctl bootout` the running job, not call the equivalent of
-`SMAppService.unregister()`. If a stale "Nagi" entry shows up there
-after uninstalling, removing it by hand (same "−"/right-click gesture as
-Input Sources above) is the expected fix; not yet verified against a
-real reinstall/uninstall cycle.
+**Tested (#30 follow-up): `NagiConverter` does not leave a visible
+ghost entry in System Settings > General > Login Items.** Since it's
+registered via `SMAppService` from inside the app rather than a plist
+this script writes, there's no file left to delete for that cleanup —
+this script can only `launchctl bootout` the running job, not call the
+equivalent of `SMAppService.unregister()` (an instance method callable
+only from inside the registering app's own running process — no public
+API exists for an external script to unregister someone else's
+`SMAppService` entry). Confirmed on the dev machine: right after
+uninstalling, both `Nagi` and `NagiConverter` briefly persisted at the
+`sfltool dumpbtm` level (`Nagi` flipped to `disabled`,
+`NagiConverter` stayed `enabled`), but neither ever appeared in System
+Settings' actual Login Items UI, and both were gone from that same
+`dumpbtm` dump within a few minutes with no manual step taken. No
+user-facing residue.
 
 ## Exit criterion
 
