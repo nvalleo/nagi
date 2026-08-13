@@ -11,6 +11,11 @@ import SwiftUI
 
 struct CandidateListView: View {
     @ObservedObject var state: CandidateListState
+    /// #39: 設定ウィンドウでフォントサイズを変えた場合に、次のキー入力
+    /// を待たず今表示中の候補ウィンドウにも即座に反映されるよう、
+    /// `state` と同じく `@ObservedObject` で観測する（`NagiSettings.
+    /// shared` を直接読むだけだと SwiftUI の再描画トリガーにならない）。
+    @ObservedObject private var settings = NagiSettings.shared
 
     /// M3a (#13): was a step-change (`background(condition ? color :
     /// .clear)` with no animation) — the highlight jumped instantly
@@ -46,8 +51,16 @@ struct CandidateListView: View {
     // "compute a slice that contains it", recomputed fresh on every
     // `focusedID` change like any other SwiftUI state.
     private static let maxVisibleRows: CGFloat = 10
-    private static let approximateRowHeight: CGFloat = 25
-    private static let maxListHeight = maxVisibleRows * approximateRowHeight
+    /// #39: `NagiSettings.shared.candidateFontSize`（設定ウィンドウの
+    /// 「候補フォントサイズ」）に連動する行高。`+10` はデフォルトの
+    /// 15pt から元のハードコード値 25pt を再現するオフセットで、行の
+    /// 上下パディング分の見積もり——実測ではないのは変更前から同じ。
+    /// `static let` から `static var`（計算プロパティ）に変えただけな
+    /// ので、参照側（`maxListHeight`/`Row.height` 等）は無変更で動く。
+    private static var approximateRowHeight: CGFloat {
+        CGFloat(NagiSettings.shared.candidateFontSize) + 10
+    }
+    private static var maxListHeight: CGFloat { maxVisibleRows * approximateRowHeight }
 
     /// `.frame(maxHeight:)` below caps the *content* height, but adding
     /// it (or `body`'s own ideal height) doesn't cap what
@@ -56,7 +69,7 @@ struct CandidateListView: View {
     /// to this explicitly. `outerPadding` accounts for the `.padding(4)`
     /// around the list itself (4pt top + 4pt bottom).
     static let outerPadding: CGFloat = 8
-    static let maxPanelHeight = maxListHeight + outerPadding
+    static var maxPanelHeight: CGFloat { maxListHeight + outerPadding }
 
     /// M3d (#16): emoji/kaomoji candidates (`Candidate.isPictograph`,
     /// see `CandidateListState`) render as fixed-size grid cells instead
@@ -224,7 +237,7 @@ struct CandidateListView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 14, alignment: .trailing)
             Text(candidate.text)
-                .font(.system(size: 15))
+                .font(.system(size: settings.candidateFontSize))
             if candidate.hasSubCandidates {
                 // Visual cue that further variants (half/full-width
                 // etc., under "そのほかの文字種" and similar) are one

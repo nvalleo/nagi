@@ -56,6 +56,36 @@ enum MozcBridge {
         try runSync { try await client.sendCommand(command, session: session) }
     }
 
+    /// #39: settings window calls — unlike everything above, these run
+    /// from a plain SwiftUI button action, not an IMKit synchronous
+    /// callback, so there's no need to go through `runSync`'s
+    /// semaphore-blocking bridge. Still funneled through `MozcBridge`
+    /// (not `MozcClient` directly) so every Mozc IPC call in the app
+    /// goes through one place.
+    static func clearUserHistory() async throws {
+        try await client.clearUserHistory()
+    }
+
+    static func clearUserPrediction() async throws {
+        try await client.clearUserPrediction()
+    }
+
+    static func getConfig() async throws -> Mozc_Config_Config {
+        try await client.getConfig()
+    }
+
+    static func setConfig(_ config: Mozc_Config_Config) async throws {
+        try await client.setConfig(config)
+    }
+
+    /// #40: settings window's user dictionary editor pushes the whole
+    /// dictionary on every change — see `UserDictionaryStore.push()` and
+    /// `MozcClient.importUserDictionary`'s doc comment for why that's the
+    /// intended usage, not wasted work.
+    static func importUserDictionary(name: String, tsv: String) async throws {
+        try await client.importUserDictionary(name: name, tsv: tsv)
+    }
+
     private static func runSync<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
         let semaphore = DispatchSemaphore(value: 0)
         let box = ResultBox<T>()

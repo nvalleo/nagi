@@ -267,6 +267,26 @@ final class NagiInputController: IMKInputController {
         flush(client: client)
     }
 
+    /// #39: メニューバーの入力ソースメニューに出す項目。target を明示
+    /// せず action だけ渡すと、IMKit が selector を実装している
+    /// controller 自身 (self) にルーティングする —— macSKK
+    /// (InputController.swift の menu()) と同じ配線。設定ウィンドウは
+    /// プロセスに一つのシングルトンなので、複数の NagiInputController
+    /// インスタンスから呼ばれても表示先は常に同じウィンドウ。
+    override func menu() -> NSMenu! {
+        let menu = NSMenu()
+        menu.addItem(
+            withTitle: "環境設定…",
+            action: #selector(showSettings),
+            keyEquivalent: ""
+        )
+        return menu
+    }
+
+    @objc private func showSettings() {
+        SettingsWindowController.shared.show()
+    }
+
     /// Forces mozc_server to submit whatever composition is pending
     /// (SessionCommand.SUBMIT — see MozcClient.submit) and renders the
     /// result. Shared by commitComposition(_:), which IMKit calls when
