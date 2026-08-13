@@ -49,6 +49,11 @@ struct UserDictionaryView: View {
                             }
                         }
                         .labelsHidden()
+                        // 列揃えのため視覚ラベルは上のヘッダー行「品詞」
+                        // に譲って `.labelsHidden()` にしているが、
+                        // VoiceOver 用の名前まで消えてしまっていたので
+                        // 明示的に補う。
+                        .accessibilityLabel("品詞")
                         .frame(minWidth: 130)
                         Button("追加", action: addEntry)
                             .disabled(newReading.isEmpty || newWord.isEmpty)
@@ -85,25 +90,38 @@ struct UserDictionaryView: View {
                         GridRow {
                             HStack(spacing: 4) {
                                 Text(entry.reading)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
                                 if entry.readingLooksUnconvertible {
                                     Image(systemName: "exclamationmark.triangle")
                                         .foregroundStyle(.orange)
+                                        // `.help` はマウスホバー時のツール
+                                        // チップで、VoiceOver には読まれ
+                                        // ない——読み上げ用のラベルは
+                                        // 別に必要。
                                         .help("よみが半角英数字のみのため、日本語入力中には一致しません。")
+                                        .accessibilityLabel("よみが半角英数字のみのため、日本語入力中には一致しません")
                                 }
                             }
                             Text(entry.word)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                             Text(entry.partOfSpeech.displayName)
                                 .foregroundStyle(.secondary)
                             // macOS の List は iOS と違いスワイプ削除が
                             // なく、`.onDelete` だけでは削除する手段が
                             // 事実上見えない状態になっていた——行ごとに
-                            // 明示的な削除ボタンを置く。
+                            // 明示的な削除ボタンを置く。アイコンのみの
+                            // ボタンは VoiceOver では「ゴミ箱、ボタン」
+                            // としか読まれずどの行の削除か伝わらない
+                            // ため、対象の単語を含むラベルを明示する。
                             Button {
                                 removeEntry(entry)
                             } label: {
                                 Image(systemName: "trash")
                             }
                             .buttonStyle(.borderless)
+                            .accessibilityLabel("「\(entry.word)」を削除")
                             .gridColumnAlignment(.trailing)
                         }
                     }
