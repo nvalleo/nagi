@@ -6,7 +6,7 @@
 
 <p align="center">
   A modern, lightweight Japanese IME for macOS — the conversion quality you<br>
-  already know, in a candidate window that finally looks like it was made this decade.
+  already know, in a new SwiftUI candidate window.
 </p>
 
 <p align="center">
@@ -24,10 +24,10 @@
 ## Contents
 
 - [What it is](#what-it-is)
+- [Features](#features)
 - [Install](#install)
 - [Uninstall](#uninstall)
 - [Why another Japanese IME](#why-another-japanese-ime)
-- [Non-goals](#non-goals)
 - [Architecture at a glance](#architecture-at-a-glance)
 - [Performance targets](#performance-targets)
 - [Development](#development)
@@ -44,29 +44,53 @@ The name is 凪 — the calm, wind-free state of the sea, the moment when the
 wind dies down and the water goes still. That is the input experience we
 are aiming for: light, quiet, predictable.
 
+## Features
+
+- **A candidate window that never steals focus** — it's a non-activating
+  panel, so the app you're typing into keeps input focus throughout
+  conversion.
+
+  ![Converting text in the candidate window](docs/images/candidate-window.gif)
+
+- **`:`-triggered emoji shortcode search** — Slack/GitHub-style: type `:`
+  followed by an English keyword to search emoji. Tab browses the full
+  emoji list, and recently-used emoji surface first. Mozc's OSS build has
+  no shortcode search of its own.
+
+  ![Emoji shortcode search](docs/images/emoji-shortcode.gif)
+
 ## Install
 
 ```sh
 curl -fsSL https://github.com/nv-leo/nagi/releases/latest/download/install-nagi.sh | bash
 ```
 
-Asks for your admin password once (`/Library/Input Methods/` is a
-system folder), then launches Nagi automatically. **Then log out and
-back in once** before typing with it: macOS only picks up a
-freshly-installed input method — in System Settings > Keyboard > Input
-Sources, the menu bar, and its conversion engine alike — at the next
-login, not immediately. No full restart needed, just a log out — the
-same one-time step Google 日本語入力 and other third-party macOS IMEs
-also require, not something `nagi` can skip.
+- Asks for your admin password once (`/Library/Input Methods/` is a
+  system folder)
+- Launches Nagi automatically once it's done
+
+> [!IMPORTANT]
+> Then log out and back in once before typing with it. macOS only
+> picks up a freshly-installed input method — in System Settings >
+> Keyboard > Input Sources, the menu bar, and its conversion engine
+> alike — at the next login, not immediately. No full restart needed,
+> just a log out — the same one-time step Google 日本語入力 and other
+> third-party macOS IMEs also require, not something `nagi` can skip.
+
+<details>
+<summary>Why a curl one-liner</summary>
 
 This is a `curl | bash` one-liner — reasonable to want to read a script
 before piping it into a shell, so `app/README.md`'s "Prebuilt download"
-section has the download-then-read-then-run alternative, plus why this
-replaced an earlier `.dmg`-based installer (short version: `nagi` is
-pre-alpha and unsigned/unnotarized — no paid Apple Developer ID yet —
-and it turns out that combination makes a `.dmg` fundamentally unable
-to open without a Terminal detour anyway, so the one-liner is the more
-honest shape).
+section has the download-then-read-then-run alternative.
+
+It also replaced an earlier `.dmg`-based installer. Short version:
+`nagi` is pre-alpha and unsigned/unnotarized — no paid Apple Developer
+ID yet — and it turns out that combination makes a `.dmg` fundamentally
+unable to open without a Terminal detour anyway, so the one-liner is
+the more honest shape.
+
+</details>
 
 Prefer building it yourself instead? See [`app/README.md`](app/README.md)
 for the full build-from-source steps.
@@ -78,11 +102,14 @@ copies it there itself the first time it runs, so it's there whenever
 you actually need it without the installer needing to do anything
 extra. It asks for confirmation and your admin password, then removes
 Nagi, stops its background process, and clears its entry from Input
-Sources — no Terminal needed. An empty, unlabeled row can be left
-behind under the 日本語 (Japanese) group afterwards; it's harmless, and
-the uninstaller offers (but doesn't force) a restart to clear it. It
-removes itself as the last step, once everything else has succeeded —
-nothing left over to throw away by hand.
+Sources — no Terminal needed. It removes itself as the last step, once
+everything else has succeeded — nothing left over to throw away by
+hand.
+
+> [!NOTE]
+> An empty, unlabeled row can be left behind under the 日本語 (Japanese)
+> group afterwards. It's harmless, and the uninstaller offers (but
+> doesn't force) a restart to clear it.
 
 (`install-nagi.sh` itself failed partway through, so Nagi never got to
 run and never deployed that uninstaller? Remove
@@ -103,7 +130,7 @@ engine — Mozc — so the difference is entirely in the surface:
 | | Google 日本語入力 (official) | **nagi** |
 |---|---|---|
 | Conversion | Mozc | Mozc (bundled) |
-| Candidate UI | Legacy (~2010) | Modern, SwiftUI |
+| Candidate UI | 2010s design | Modern, SwiftUI |
 | Extra install | — | none |
 | Predictability | High | High |
 | Memory | Low | Low |
@@ -111,15 +138,9 @@ engine — Mozc — so the difference is entirely in the surface:
 `nagi` is not trying to be smarter than the engine — the engine is already
 good. It is trying to be the frontend Mozc has been missing on macOS.
 
-## Non-goals
-
-- **Not** a neural / LLM-first IME. If you want Magic Conversions, use azooKey.
-- **Not** an engineer-specialised IME. It should feel right for writers, office
-  users, students — anyone typing Japanese.
-- **Not** a Mozc fork. We track upstream `google/mozc` and only replace the
-  renderer.
-- **Not** cross-platform in v1. Linux and Windows are on the long-term
-  roadmap, once the macOS core has stabilised.
+If neural / LLM-first conversion (Magic Conversions) is what you're after,
+azooKey is the better fit. `nagi` is not a Mozc fork — we track upstream
+`google/mozc` and only replace the renderer.
 
 ## Architecture at a glance
 

@@ -76,7 +76,7 @@ if userChoice is "アンインストール" then
 	-- touch (#32 follow-up).
 	do shell script "defaults delete com.nvleo.inputmethod.nagi FirstRunLogoutPromptShown >/dev/null 2>&1; exit 0"
 
-	set restartChoice to button returned of (display dialog "Nagi をアンインストールしました。" & return & return & "「日本語」の入力ソース一覧に空欄の行が残ることがあります。実害はありませんが、完全に消すには再起動が必要です（今すぐでなくても構いません）。" buttons {"後で", "今すぐ再起動"} default button "後で" with icon note)
+	set restartChoice to button returned of (display dialog "Nagi をアンインストールしました。" & return & return & "「日本語」の入力ソース一覧に空欄の行が残ることがあります。実害はありません。ただし、完全に消すには再起動が必要です（今すぐでなくても構いません）。" buttons {"後で", "今すぐ再起動"} default button "後で" with icon note)
 
 	-- Finally, remove the uninstaller itself — otherwise it lives
 	-- forever wherever it was dragged (typically /Applications, #33
