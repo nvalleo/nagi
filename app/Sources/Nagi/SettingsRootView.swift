@@ -1,8 +1,10 @@
-// SettingsRootView — #39/#40: 設定ウィンドウ全体のタブ切り替え。
+// SettingsRootView — #39/#40: tab switcher for the whole settings
+// window.
 //
-// 「一般」（SettingsView、数個のトグル・スライダー）と「ユーザー辞書」
-// （UserDictionaryView、一覧+追加/削除の CRUD）は画面の性質が違うので、
-// 1 つの Form に詰め込まず別タブに分けてある。
+// "General" (SettingsView, a handful of toggles/sliders) and "User
+// Dictionary" (UserDictionaryView, a list plus add/delete CRUD) are
+// different enough in nature that they're split into separate tabs
+// rather than crammed into one Form.
 
 import AppKit
 import SwiftUI
@@ -10,11 +12,12 @@ import SwiftUI
 struct SettingsRootView: View {
     var body: some View {
         VStack(spacing: 0) {
-            // Nagi は LSUIElement（Dock アイコンなし）なので、開いている
-            // 他のウィンドウに混ざると設定ウィンドウだけ見た目の手がかり
-            // が何もない。`NSImage.applicationIconName` は Info.plist の
-            // `CFBundleIconFile`（Nagi.icns）を自動的に読む特別な名前
-            // ——バンドル内のパスをこちらで組み立てる必要はない。
+            // Nagi is LSUIElement (no Dock icon), so if this window ends
+            // up mixed in among other open windows there's otherwise no
+            // visual cue telling them apart. NSImage.applicationIconName
+            // is a special name that automatically resolves to
+            // Info.plist's CFBundleIconFile (Nagi.icns) — no need to
+            // build the bundle path ourselves.
             HStack(spacing: 8) {
                 Image(nsImage: NSImage(named: NSImage.applicationIconName) ?? NSImage())
                     .resizable()
@@ -34,11 +37,12 @@ struct SettingsRootView: View {
                     .tabItem { Label("ユーザー辞書", systemImage: "character.book.closed") }
             }
         }
-        // 固定 frame ではなく min/ideal を渡すことで、
-        // SettingsWindowController 側で有効にした `.resizable` を
-        // SwiftUI 側が殺さないようにする——単なる `.frame(width:
-        // height:)` のままだとウィンドウを resizable にしても中身が
-        // 追従せず、実質リサイズできないのと同じになる。
+        // min/ideal instead of a fixed frame, so this doesn't override
+        // the `.resizable` style mask SettingsWindowController sets on
+        // the window — a plain `.frame(width:height:)` here would make
+        // the window technically resizable but the SwiftUI content
+        // wouldn't follow, which amounts to the same thing as not
+        // resizable at all.
         .frame(minWidth: 480, idealWidth: 560, minHeight: 420, idealHeight: 480)
     }
 }

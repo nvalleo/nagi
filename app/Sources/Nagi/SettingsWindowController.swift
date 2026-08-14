@@ -1,14 +1,15 @@
-// SettingsWindowController — #39: 設定ウィンドウ本体を owns する
-// プロセス内シングルトン。
+// SettingsWindowController — #39: process-wide singleton owning the
+// settings window itself.
 //
-// CandidateWindowController の NSPanel と違い、こちらは普通の
-// NSWindow — タイトルバー・クローズボタンを持つ通常の書類 window で
-// よく、フォーカスを奪ってはいけない候補ウィンドウの制約はない。
+// Unlike CandidateWindowController's NSPanel, this is a plain NSWindow —
+// a normal document-style window with a title bar and close button is
+// fine here, since none of the candidate window's "must not steal
+// focus" constraints apply.
 //
-// Nagi は LSUIElement（Dock アイコンなし）で、IMKit のメニュー項目
-// (NagiInputController.menu()) から呼ばれるまで一度も前面に出ない
-// —— FirstRunPrompt.swift と同じく、表示直前に
-// NSApp.activate(ignoringOtherApps:) が要る。
+// Nagi is LSUIElement (no Dock icon) and never comes to the foreground
+// on its own until called from the IMKit menu item
+// (NagiInputController.menu()) — same as FirstRunPrompt.swift, this
+// needs NSApp.activate(ignoringOtherApps:) right before showing.
 
 import Cocoa
 import SwiftUI
@@ -25,9 +26,9 @@ final class SettingsWindowController: NSWindowController {
             defer: false
         )
         window.title = "Nagi の設定"
-        // SettingsRootView 側の `.frame(minWidth:minHeight:...)` と対に
-        // なる下限——ウィンドウだけを先に小さくドラッグされても
-        // SwiftUI 側のレイアウトが壊れないようにする。
+        // Pairs with SettingsRootView's own `.frame(minWidth:minHeight:
+        // ...)` — keeps SwiftUI's layout from breaking if the window
+        // itself gets dragged smaller first.
         window.minSize = NSSize(width: 480, height: 420)
         window.contentView = NSHostingView(rootView: SettingsRootView())
         window.isReleasedWhenClosed = false
@@ -35,9 +36,10 @@ final class SettingsWindowController: NSWindowController {
         self.init(window: window)
     }
 
-    /// 何度呼んでも同じウィンドウを前面に出すだけ —— NagiInputController
-    /// は IMKit の client 接続ごとに複数インスタンス化されうるが
-    /// (docs/architecture.md)、設定ウィンドウはプロセスに一つで十分。
+    /// Just brings the same window to front on every call —
+    /// NagiInputController can be instantiated multiple times, one per
+    /// IMKit client connection (docs/architecture.md), but the settings
+    /// window only needs to exist once per process.
     func show() {
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)

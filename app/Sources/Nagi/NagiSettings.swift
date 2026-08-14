@@ -1,11 +1,11 @@
-// NagiSettings — nagi 独自の設定値。
+// NagiSettings — nagi's own (non-mozc) settings.
 //
-// #39: UserDefaults に直接読み書きするプロセス内シングルトンとして、
-// RecentEmojiStore/EmojiShortcodeDictionary と同じパターン（.shared）
-// を踏襲する。設定ウィンドウと候補ウィンドウは同一プロセス内で動くの
-// で、@Published の変更は両方に即座に伝わり、プロセス間同期の仕組み
-// は要らない — mozc 由来の設定（NagiSettings.mozc の管轄外、
-// MozcClient 経由で config1.db に持つ）とは保存先が分かれる。
+// #39: a process-wide singleton reading/writing UserDefaults directly,
+// same pattern (.shared) as RecentEmojiStore/EmojiShortcodeDictionary.
+// The settings window and the candidate window run in the same process,
+// so @Published changes reach both immediately — no cross-process sync
+// needed. This is a separate store from mozc-originated settings
+// (outside NagiSettings' scope, kept in config1.db via MozcClient).
 
 import Combine
 import Foundation
@@ -19,15 +19,16 @@ final class NagiSettings: ObservableObject {
     }
 
     static let defaultCandidateFontSize: Double = 15
-    /// 下限はグリフが判読できる最小値、上限は候補ウィンドウが横に暴れ
-    /// ない範囲——どちらも実測ではなく常識的な値。
+    /// Lower bound is roughly the smallest still-legible glyph size;
+    /// upper bound keeps the candidate window from growing unreasonably
+    /// wide. Neither is measured — both are common-sense values.
     static let candidateFontSizeRange: ClosedRange<Double> = 11...24
 
     private let defaults: UserDefaults
 
-    /// CandidateListView の候補テキストのフォントサイズ。デフォルト値
-    /// は変更前の元々のハードコード値（15pt）と一致させてあるので、
-    /// 未設定時の見た目は変わらない。
+    /// Font size for CandidateListView's candidate text. Defaults to the
+    /// value that was previously hardcoded (15pt), so the look is
+    /// unchanged until the user actually opens the settings window.
     @Published var candidateFontSize: Double {
         didSet {
             defaults.set(candidateFontSize, forKey: Keys.candidateFontSize)

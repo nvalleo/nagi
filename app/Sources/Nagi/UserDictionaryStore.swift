@@ -1,13 +1,15 @@
-// UserDictionaryStore — #40: nagi 側が真実の情報源として持つユーザー
-// 辞書エントリの配列と、mozc への push。
+// UserDictionaryStore — #40: the array of user-dictionary entries that
+// nagi treats as the source of truth, plus pushing it to mozc.
 //
-// #40 の調査コメントで比較検討したとおり、OS のテキスト置換の自動
-// 取り込みはしない（変更検知の口がない・ iCloud 同期で意図せず増減する
-// ・ ASCII よみがひらがな変換中に一致しない、という 3 つの構造的な問題
-// があるため）。nagi はこの配列だけを真実として持ち、変更のたびに
-// 辞書名固定で全件を mozc へ push する——差分同期のロジックを持たない
-// ことで実装・保守コストを最小化する設計判断（IMPORT_USER_DICTIONARY
-// が同名辞書を丸ごと置換してくれるので、この単純化に対応できる）。
+// As weighed in #40's investigation comment, this deliberately does not
+// auto-import macOS's own text replacements — there's no way to detect
+// changes to them, iCloud sync can grow/shrink the list without the
+// user's intent, and an ASCII reading never matches mid-conversion
+// anyway. nagi treats this array alone as the source of truth and, on
+// every change, pushes the full set to mozc under a fixed dictionary
+// name — not diffing keeps the implementation and maintenance cost low
+// (IMPORT_USER_DICTIONARY replaces the named dictionary wholesale, which
+// is exactly what makes this simplification work).
 
 import Combine
 import Foundation
@@ -16,9 +18,9 @@ final class UserDictionaryStore: ObservableObject {
 
     static let shared = UserDictionaryStore()
 
-    /// mozc 側に作る辞書の名前は固定——nagi はユーザーに複数辞書を
-    /// 選ばせる複雑さを持たない設計なので、常にこの 1 つだけを丸ごと
-    /// 置き換える。
+    /// Fixed name for the dictionary created on the mozc side — nagi
+    /// isn't designed to let the user manage multiple dictionaries, so
+    /// there's always exactly this one, replaced wholesale each time.
     static let mozcDictionaryName = "Nagi"
 
     private static let userDefaultsKey = "NagiUserDictionaryEntries"
@@ -36,10 +38,10 @@ final class UserDictionaryStore: ObservableObject {
         }
     }
 
-    /// 追加・削除のみで、既存エントリの更新はサポートしない——
-    /// 編集したければ削除して登録し直す。この画面に求められている
-    /// のは実装・保守コストの低さなので、行内編集の状態管理までは
-    /// 持たせないという意図的なスコープ限定。
+    /// Add and remove only — updating an existing entry isn't supported;
+    /// editing means deleting and re-adding. This screen's requirement is
+    /// low implementation/maintenance cost, so it deliberately doesn't
+    /// carry the state management an inline-editable row would need.
     func add(_ entry: UserDictionaryEntry) {
         entries.append(entry)
         persist()
@@ -55,10 +57,11 @@ final class UserDictionaryStore: ObservableObject {
         defaults.set(data, forKey: Self.userDefaultsKey)
     }
 
-    /// mozc の TSV インポート形式（よみ\t 単語\t 品詞）を組み立てる。
-    /// タブ/改行がよみ・単語に混ざると列がずれるので取り除く——弾いて
-    /// エラーにするより、少なくとも登録自体は通す方を選んだ（この
-    /// フィールドは 1 行 TextField 入力なので通常は混入しない）。
+    /// Builds mozc's TSV import format (reading\tword\tPOS). Tabs/
+    /// newlines are stripped from the reading/word first since they'd
+    /// otherwise shift the columns — chosen over rejecting the entry as
+    /// an error, so registration at least goes through (this field is a
+    /// single-line TextField, so this shouldn't come up in practice).
     func buildTSV() -> String {
         entries.map { entry in
             let reading = entry.reading.replacingOccurrences(of: "\t", with: "").replacingOccurrences(of: "\n", with: "")
@@ -67,10 +70,11 @@ final class UserDictionaryStore: ObservableObject {
         }.joined(separator: "\n")
     }
 
-    /// #40: 変更のたびに全件を mozc へ push する——差分計算をしない
-    /// 設計（このファイル冒頭コメント参照）。戻り値のない非同期
-    /// コマンドなので、成否は呼び出し元で実際に変換して確かめるしか
-    /// ない（MozcClient.importUserDictionary のドキュメント参照）。
+    /// #40: pushes the full set to mozc on every change — no diffing, by
+    /// design (see this file's header comment). This is an async command
+    /// with no result reported back, so success can only be confirmed by
+    /// actually converting afterward (see MozcClient.importUserDictionary's
+    /// doc comment).
     func push() async throws {
         try await MozcBridge.importUserDictionary(name: Self.mozcDictionaryName, tsv: buildTSV())
     }

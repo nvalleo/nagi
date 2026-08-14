@@ -1,16 +1,18 @@
-// UserDictionaryView — #40: 設定ウィンドウ内のユーザー辞書タブ。
+// UserDictionaryView — #40: the "user dictionary" tab in the settings
+// window.
 //
-// 追加専用の入力行 + 一覧（削除のみ、行内編集はしない——理由は
-// UserDictionaryStore.add/remove のドキュメント参照）というごく単純な
-// 構成。エントリが変わるたび `UserDictionaryStore.push()` で mozc へ
-// 全件送り直す。
+// A very simple shape: an add-only input row plus a list (delete only,
+// no inline editing — see UserDictionaryStore.add/remove's doc comment
+// for why). `UserDictionaryStore.push()` re-sends the full set to mozc
+// on every change.
 //
-// 追加行と一覧行は同じ `Grid` の中の GridRow として並べてある——
-// 別コンテナ（GroupBox のカードと List）に分けていた前バージョンは、
-// それぞれが独立に列幅を決めるせいで「よみ・単語・品詞」の列が追加行
-// と一覧行とで揃わなかった。Grid は列幅を全 GridRow 横断で揃えて
-// くれるので、この問題はコンテナを 1 つにまとめるだけで解決する
-// （macOS 13+ の Grid API — Package.swift の platforms 指定を満たす）。
+// The add row and the list rows live as GridRows in the same `Grid` —
+// an earlier version split them into separate containers (a GroupBox
+// card and a List), each computing its own column widths independently,
+// which meant the よみ/単語/品詞 columns didn't line up between the add
+// row and the list below it. Grid keeps column widths consistent across
+// every GridRow, so merging both into one container solves that
+// (macOS 13+ Grid API — within Package.swift's platform requirement).
 
 import SwiftUI
 
@@ -34,10 +36,11 @@ struct UserDictionaryView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                    // よみ・単語は `.frame(maxWidth: .infinity)` を持つ
-                    // セルが列にあるとその列が可変幅になる、という Grid
-                    // の挙動を使ってウィンドウ幅に追従させている。品詞・
-                    // ボタン列は内容量が決まっているので最小幅のみ。
+                    // Reading/word cells carry `.frame(maxWidth:
+                    // .infinity)`, which is what makes Grid treat their
+                    // column as flexible and grow with the window —
+                    // POS/button columns have fixed, known content sizes
+                    // so they only need a minimum width.
                     GridRow {
                         TextField("ひらがな", text: $newReading)
                             .frame(minWidth: 110, maxWidth: .infinity)
@@ -49,10 +52,11 @@ struct UserDictionaryView: View {
                             }
                         }
                         .labelsHidden()
-                        // 列揃えのため視覚ラベルは上のヘッダー行「品詞」
-                        // に譲って `.labelsHidden()` にしているが、
-                        // VoiceOver 用の名前まで消えてしまっていたので
-                        // 明示的に補う。
+                        // The visible label is deferred to the "品詞"
+                        // header row above for column alignment, via
+                        // `.labelsHidden()` — but that also drops the
+                        // VoiceOver name, so it's restored explicitly
+                        // here.
                         .accessibilityLabel("品詞")
                         .frame(minWidth: 130)
                         Button("追加", action: addEntry)
@@ -60,10 +64,10 @@ struct UserDictionaryView: View {
                             .gridColumnAlignment(.trailing)
                     }
 
-                    // #40 の調査コメントの制約: ASCII だけのよみは
-                    // ローマ字→ひらがな変換の preedit と一致しないため
-                    // 事実上ヒットしない。登録自体は止めず、ここで
-                    // 気づけるようにするだけ。
+                    // Constraint noted in #40's investigation comment: a
+                    // reading made of nothing but ASCII can never match
+                    // during romaji→hiragana conversion. Registration
+                    // itself isn't blocked — this is just a heads-up.
                     if !newReading.isEmpty && newReading.allSatisfy(\.isASCII) {
                         GridRow {
                             Text("よみが半角英数字のみだと、日本語入力中には一致しません。")
@@ -95,10 +99,11 @@ struct UserDictionaryView: View {
                                 if entry.readingLooksUnconvertible {
                                     Image(systemName: "exclamationmark.triangle")
                                         .foregroundStyle(.orange)
-                                        // `.help` はマウスホバー時のツール
-                                        // チップで、VoiceOver には読まれ
-                                        // ない——読み上げ用のラベルは
-                                        // 別に必要。
+                                        // `.help` is a mouse-hover
+                                        // tooltip only — VoiceOver never
+                                        // reads it, so an explicit
+                                        // accessibility label is needed
+                                        // too.
                                         .help("よみが半角英数字のみのため、日本語入力中には一致しません。")
                                         .accessibilityLabel("よみが半角英数字のみのため、日本語入力中には一致しません")
                                 }
@@ -108,13 +113,14 @@ struct UserDictionaryView: View {
                                 .truncationMode(.tail)
                             Text(entry.partOfSpeech.displayName)
                                 .foregroundStyle(.secondary)
-                            // macOS の List は iOS と違いスワイプ削除が
-                            // なく、`.onDelete` だけでは削除する手段が
-                            // 事実上見えない状態になっていた——行ごとに
-                            // 明示的な削除ボタンを置く。アイコンのみの
-                            // ボタンは VoiceOver では「ゴミ箱、ボタン」
-                            // としか読まれずどの行の削除か伝わらない
-                            // ため、対象の単語を含むラベルを明示する。
+                            // Unlike iOS, macOS's List has no swipe
+                            // gesture, so `.onDelete` alone left no
+                            // actually visible way to delete a row — an
+                            // explicit delete button per row instead. An
+                            // icon-only button reads to VoiceOver as
+                            // just "trash, button" with no way to tell
+                            // which row it belongs to, hence the
+                            // explicit label naming the entry.
                             Button {
                                 removeEntry(entry)
                             } label: {

@@ -267,12 +267,13 @@ final class NagiInputController: IMKInputController {
         flush(client: client)
     }
 
-    /// #39: メニューバーの入力ソースメニューに出す項目。target を明示
-    /// せず action だけ渡すと、IMKit が selector を実装している
-    /// controller 自身 (self) にルーティングする —— macSKK
-    /// (InputController.swift の menu()) と同じ配線。設定ウィンドウは
-    /// プロセスに一つのシングルトンなので、複数の NagiInputController
-    /// インスタンスから呼ばれても表示先は常に同じウィンドウ。
+    /// #39: the item shown in the menu bar's Input Source menu. Passing
+    /// only `action` with no explicit target has IMKit route it to
+    /// whichever object implements the selector — the controller itself
+    /// (self) — the same wiring macSKK uses (InputController.swift's
+    /// `menu()`). The settings window is a single process-wide
+    /// singleton, so it doesn't matter which NagiInputController
+    /// instance this gets called on; it always shows the same window.
     override func menu() -> NSMenu! {
         let menu = NSMenu()
         menu.addItem(

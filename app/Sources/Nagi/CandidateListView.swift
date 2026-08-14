@@ -11,10 +11,11 @@ import SwiftUI
 
 struct CandidateListView: View {
     @ObservedObject var state: CandidateListState
-    /// #39: 設定ウィンドウでフォントサイズを変えた場合に、次のキー入力
-    /// を待たず今表示中の候補ウィンドウにも即座に反映されるよう、
-    /// `state` と同じく `@ObservedObject` で観測する（`NagiSettings.
-    /// shared` を直接読むだけだと SwiftUI の再描画トリガーにならない）。
+    /// #39: observed via `@ObservedObject`, same as `state`, so a font
+    /// size change in the settings window reaches whatever candidate
+    /// window is currently on screen immediately rather than waiting for
+    /// the next keystroke — just reading `NagiSettings.shared` directly
+    /// wouldn't trigger a SwiftUI redraw.
     @ObservedObject private var settings = NagiSettings.shared
 
     /// M3a (#13): was a step-change (`background(condition ? color :
@@ -51,12 +52,13 @@ struct CandidateListView: View {
     // "compute a slice that contains it", recomputed fresh on every
     // `focusedID` change like any other SwiftUI state.
     private static let maxVisibleRows: CGFloat = 10
-    /// #39: `NagiSettings.shared.candidateFontSize`（設定ウィンドウの
-    /// 「候補フォントサイズ」）に連動する行高。`+10` はデフォルトの
-    /// 15pt から元のハードコード値 25pt を再現するオフセットで、行の
-    /// 上下パディング分の見積もり——実測ではないのは変更前から同じ。
-    /// `static let` から `static var`（計算プロパティ）に変えただけな
-    /// ので、参照側（`maxListHeight`/`Row.height` 等）は無変更で動く。
+    /// #39: row height tracks `NagiSettings.shared.candidateFontSize`
+    /// (the settings window's "候補フォントサイズ"). `+10` is the offset
+    /// that reproduces the old hardcoded 25pt from the default 15pt — an
+    /// estimate for the row's vertical padding, not a measurement, same
+    /// as before this change. Just turning `static let` into `static
+    /// var` (a computed property) means every call site
+    /// (`maxListHeight`/`Row.height` etc.) keeps working unmodified.
     private static var approximateRowHeight: CGFloat {
         CGFloat(NagiSettings.shared.candidateFontSize) + 10
     }

@@ -1,18 +1,19 @@
-// SettingsView — #39 の設定ウィンドウ「一般」タブの中身
-// （SettingsRootView 参照。ユーザー辞書タブは #40 の UserDictionaryView）。
+// SettingsView — #39: contents of the settings window's "General" tab
+// (see SettingsRootView; the user dictionary tab is #40's
+// UserDictionaryView).
 //
-// NagiSettings.shared / RecentEmojiStore.shared を直接 @ObservedObject
-// で観測する（既存の *.shared パターンを踏襲 — NagiSettings.swift 参照）。
-// 依存を注入せず shared を直接見るのは、この View がプロセス内に一つ
-// しかない SettingsWindowController からしか使われないため。
+// Observes NagiSettings.shared / RecentEmojiStore.shared directly via
+// @ObservedObject, following the existing *.shared pattern (see
+// NagiSettings.swift). Injecting nothing and reading .shared directly is
+// fine because this View is only ever used by the single
+// SettingsWindowController instance in the process.
 //
-// mozc 由来の設定（`変換` セクション）は nagi 独自設定と保存先が違い
-// （UserDefaults ではなく mozc の config1.db — MozcClient.getConfig/
-// setConfig 参照）、`@State private var mozcConfig` にウィンドウを開く
-// たびフェッチしたスナップショットを持つ。SET_CONFIG は Config を丸ごと
-// 置き換えるプロトコルなので、常にこのスナップショットを起点に一部だけ
-// 書き換えて送り返す read-modify-write になっている
-// （`updateConfig(_:)` 参照）。
+// mozc-originated settings (the "変換" section) live in a different
+// store than nagi's own settings — not UserDefaults, but mozc's own
+// config1.db (see MozcClient.getConfig/setConfig). `@State private var
+// mozcConfig` holds a snapshot fetched when the window opens. SET_CONFIG
+// replaces the whole Config proto, so every mutation here is a
+// read-modify-write starting from that snapshot (see updateConfig(_:)).
 
 import NagiMozcProto
 import SwiftUI
@@ -20,21 +21,23 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject private var settings = NagiSettings.shared
 
-    /// リセット系ボタンの結果を伝えるだけの簡易な一過性メッセージ。
-    /// 込み入った状態管理をするほどの価値がないため、Alert 等は使わず
-    /// 1 行の Text で十分——数秒後に消すような仕掛けもあえて作らない
-    /// (次の操作やウィンドウを閉じるまで残っていても実害がない)。
+    /// A lightweight, ephemeral message reporting the result of a reset
+    /// button — not worth the complexity of an Alert; a single line of
+    /// Text is enough, and there's no need to auto-dismiss it after a
+    /// few seconds either (leaving it up until the next action or window
+    /// close is harmless).
     @State private var statusMessage: String?
 
-    /// `nil` はまだ取得できていない状態（起動直後、または取得失敗）。
-    /// `変換` セクションはこれが埋まるまで操作不能にする——空の
-    /// Config を仮に見せて操作させると、実際の現在値と食い違ったまま
-    /// SET_CONFIG で上書きしてしまう事故につながる。
+    /// `nil` means not fetched yet (just opened, or the fetch failed).
+    /// The "変換" section stays disabled until this is populated —
+    /// showing controls against a placeholder Config and letting the
+    /// user act on it would risk overwriting the real current value with
+    /// SET_CONFIG.
     @State private var mozcConfig: Mozc_Config_Config?
 
-    /// `CandidateWindow.pageSize`（9、NagiInputController 冒頭のコメント
-    /// 群で言及されている mozc プロトコル側の値）と同じ上限。1 未満は
-    /// 候補が出せず意味をなさない。
+    /// Same upper bound as `CandidateWindow.pageSize` (9, already
+    /// referenced in NagiInputController's header comments) — the mozc
+    /// protocol's own limit. Below 1 there'd be no candidates to show.
     private static let suggestionsSizeRange: ClosedRange<Int> = 1...9
 
     var body: some View {
@@ -57,11 +60,13 @@ struct SettingsView: View {
 
             Section("変換") {
                 if let mozcConfig {
-                    // トグルの説明は 1 行のラベルに () で埋め込まず、
-                    // 短い名詞句＋グレーの補足キャプションという System
-                    // Settings 側のトグルと同じ 2 段構成にしてある——
-                    // ラベル本文の途中に括弧が挟まると、それが名詞句と
-                    // 「を使う」のどちらへの注釈か一瞬迷う。
+                    // Toggle descriptions use a short noun-phrase label
+                    // plus a gray caption underneath, matching how System
+                    // Settings' own toggles are laid out — not a
+                    // parenthetical stuffed mid-label. A parenthetical in
+                    // the middle of a label makes it briefly ambiguous
+                    // whether it's annotating the noun phrase or the verb
+                    // that follows it.
                     Toggle(isOn: incognitoModeBinding) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("学習を無効化する")
@@ -122,12 +127,12 @@ struct SettingsView: View {
         }
     }
 
-    /// `mozcConfig` を書き換えて即座に画面に反映しつつ、mozc 側にも
-    /// `SET_CONFIG` で push する——ここで読み書きするのは常に
-    /// `mozcConfig`（直近の `getConfig()` スナップショット）で、
-    /// mutate は差分 1 つだけを当てる形にすることで、他のフィールドを
-    /// 意図せずデフォルト値に戻してしまう事故を避ける
-    /// (`MozcClient.setConfig`のドキュメント参照)。
+    /// Mutates `mozcConfig` and reflects the change on screen right away,
+    /// while also pushing it to mozc via SET_CONFIG. Always reads and
+    /// writes `mozcConfig` (the most recent getConfig() snapshot), and
+    /// `mutate` is meant to touch exactly one field at a time — that's
+    /// what keeps this from accidentally resetting every other field to
+    /// its proto default (see MozcClient.setConfig's doc comment).
     private func updateConfig(_ mutate: (inout Mozc_Config_Config) -> Void) {
         guard var config = mozcConfig else { return }
         mutate(&config)
@@ -169,12 +174,12 @@ struct SettingsView: View {
         )
     }
 
-    /// `CLEAR_USER_HISTORY` / `CLEAR_USER_PREDICTION` はどちらも
-    /// NagiConverter 上の全セッション共通のストアに効くので、セッション
-    /// ID を一切要らない（MozcClient/MozcClient+MachIPC 参照）。SwiftUI
-    /// のボタンアクションは同期関数である必要はないので、
-    /// `NagiInputController` のように `MozcBridge.runSync` を経由せず、
-    /// ここから直接 `Task` で async 呼び出しする。
+    /// CLEAR_USER_HISTORY / CLEAR_USER_PREDICTION both act on state
+    /// shared across every session on NagiConverter, so neither needs a
+    /// session ID (see MozcClient/MozcClient+MachIPC). A SwiftUI button
+    /// action doesn't need to be synchronous, so unlike
+    /// NagiInputController this calls straight into `Task` rather than
+    /// going through MozcBridge.runSync.
     private func resetMozcHistory() {
         Task {
             do {

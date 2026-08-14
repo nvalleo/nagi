@@ -1,12 +1,13 @@
-// UserDictionaryEntry — #40: nagi 独自に保持するユーザー辞書エントリ
-// 1 件分のモデル。
+// UserDictionaryEntry — #40: the model for a single user-dictionary
+// entry, nagi's own.
 //
-// mozc の user_dictionary.PosType は 44 種（動詞の行/段別活用まで
-// 個別のケースを持つ）あるが、実際の単語登録でよく使われるものはごく
-// 一部——Google 日本語入力の単語登録ダイアログ自体もフル網羅は
-// していない。ここでは代表的な 14 種だけを UI に出す、意図的に絞った
-// サブセットにしている（#40 の調査コメント参照。動詞活用クラスは
-// 個人辞書用途での必要性が薄いため対象外）。
+// mozc's user_dictionary.PosType has 44 cases (down to individual verb
+// conjugation classes by row/group), but only a handful of them see real
+// use in everyday word registration — even Google 日本語入力's own word
+// registration dialog doesn't expose the full set. Only 14 common cases
+// are surfaced in the UI here, a deliberately curated subset (see #40's
+// investigation comment; verb conjugation classes are out of scope,
+// rarely useful for a personal dictionary).
 
 import Foundation
 
@@ -28,10 +29,11 @@ enum UserDictionaryPartOfSpeech: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// mozc の TSV インポート形式の 3 列目に入る、そのままのリテラル。
-    /// `dictionary/user_dictionary_importer.cc`（ConvertEntry）はこの
-    /// 文字列を `PosType` にマッチさせるので、1 文字でも違うとその行は
-    /// 黙って読み捨てられる——値を変えるときは要注意。
+    /// The literal string that goes in column 3 of mozc's TSV import
+    /// format. `dictionary/user_dictionary_importer.cc` (ConvertEntry)
+    /// matches this string against `PosType` — get even one character
+    /// wrong and the whole line is silently dropped, so change these
+    /// values with care.
     var mozcLabel: String {
         switch self {
         case .noun: "名詞"
@@ -51,9 +53,9 @@ enum UserDictionaryPartOfSpeech: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Picker の表示名——現状は `mozcLabel` と同じでよいが、日本語
-    /// ラベル以外の表示にしたくなった場合に呼び出し側を変えずに済む
-    /// よう別プロパティとして分けてある。
+    /// The Picker's display name — same as `mozcLabel` today, kept as a
+    /// separate property so a future non-Japanese-label display doesn't
+    /// require touching call sites.
     var displayName: String { mozcLabel }
 }
 
@@ -63,11 +65,12 @@ struct UserDictionaryEntry: Identifiable, Codable, Equatable {
     var word: String = ""
     var partOfSpeech: UserDictionaryPartOfSpeech = .noun
 
-    /// #40 の調査コメントの制約: 変換中の入力は常にローマ字→ひらがなの
-    /// preedit を経由する（MozcKeyEventMapping）ため、よみが ASCII
-    /// だけで構成されるエントリはどう打っても preedit と一致せず、
-    /// 事実上ヒットしない。ここでは登録自体は止めず、
-    /// UserDictionaryView 側で警告を出す判断材料としてだけ使う。
+    /// A constraint noted in #40's investigation comment: input during
+    /// conversion always goes through the romaji→hiragana preedit
+    /// (MozcKeyEventMapping), so an entry whose reading is pure ASCII can
+    /// never actually match what gets typed, no matter how it's typed.
+    /// Registration itself isn't blocked on this — it's only used by
+    /// UserDictionaryView to decide when to show a warning.
     var readingLooksUnconvertible: Bool {
         !reading.isEmpty && reading.allSatisfy(\.isASCII)
     }
