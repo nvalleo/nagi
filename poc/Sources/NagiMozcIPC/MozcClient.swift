@@ -168,6 +168,84 @@ public actor MozcClient {
         return try await call(input)
     }
 
+    // MARK: - User dictionary (#40)
+
+    /// Replaces the named dictionary's entire contents with `tsv`
+    /// (mozc's own `よみ\t 単語\t 品詞` format — see
+    /// `dictionary/user_dictionary_importer.cc`). Verified against
+    /// upstream `dictionary/user_dictionary.cc`'s
+    /// `AsyncUserDictionaryImporter`: it clears the named dictionary's
+    /// entries first, so re-sending the full set on every change (rather
+    /// than diffing) is the intended usage, not wasted work — creates
+    /// the dictionary if `name` doesn't exist yet, deletes it entirely if
+    /// `tsv` is empty.
+    ///
+    /// Async on mozc's side with no result reported back (`Session
+    /// Handler::ImportUserDictionary`'s own doc comment: "returns
+    /// immediately") — this call only confirms the request was
+    /// delivered, not that every line parsed. Invalid lines (bad POS
+    /// label, invalid reading characters, oversized fields — see
+    /// `dictionary/user_dictionary_util.cc`) are silently dropped
+    /// mozc-side, not surfaced as an error here.
+    public func importUserDictionary(name: String, tsv: String) async throws {
+        var input = Mozc_Commands_Input()
+        input.type = .importUserDictionary
+        var importData = Mozc_UserDictionary_UserDictionaryImportData()
+        importData.dictionaryName = name
+        importData.data = tsv
+        input.userDictionaryImportData = importData
+        _ = try await call(input)
+    }
+
+    // MARK: - Maintenance (#39: settings window "履歴のリセット")
+
+    /// Clears converted-segment history (`SessionHandler::ClearUserHistory`
+    /// → `Engine::ClearUserHistory`) — verified against upstream
+    /// `session/session_handler.cc`'s `EvalCommand` dispatch to take no
+    /// `Input.id`/session at all, unlike `sendKey`/`sendCommand` above.
+    public func clearUserHistory() async throws {
+        var input = Mozc_Commands_Input()
+        input.type = .clearUserHistory
+        _ = try await call(input)
+    }
+
+    /// Clears prediction-learning data (`ClearUserPrediction`). Same
+    /// no-session shape as `clearUserHistory()` above; mozc treats the
+    /// two as separate stores (`session_handler.cc`), so both are
+    /// exposed as separate calls rather than one combined "reset".
+    public func clearUserPrediction() async throws {
+        var input = Mozc_Commands_Input()
+        input.type = .clearUserPrediction
+        _ = try await call(input)
+    }
+
+    /// Reads the full `Config` proto. Callers wanting to change one field
+    /// (e.g. `NagiSettings`'s "設定画面" toggles — #39) must read-modify-
+    /// write through here rather than constructing a `Config` from
+    /// scratch: `SET_CONFIG` replaces the whole proto
+    /// (`session_handler.cc`'s `SetConfig`), so any field not carried
+    /// over from a fresh `getConfig()` call would silently reset to its
+    /// proto default.
+    public func getConfig() async throws -> Mozc_Config_Config {
+        var input = Mozc_Commands_Input()
+        input.type = .getConfig
+        let output = try await call(input)
+        return output.config
+    }
+
+    /// Replaces the whole `Config` proto — see `getConfig()`'s doc
+    /// comment on why this is read-modify-write, not a partial patch.
+    /// `SetConfig` on the server side also reloads the engine
+    /// synchronously (`MaybeUpdateConfig` → `Reload`,
+    /// `session_handler.cc`), so the change is live immediately, not
+    /// just persisted to `config1.db` for next launch.
+    public func setConfig(_ config: Mozc_Config_Config) async throws {
+        var input = Mozc_Commands_Input()
+        input.type = .setConfig
+        input.config = config
+        _ = try await call(input)
+    }
+
     // MARK: - Transport
 
     private func call(_ input: Mozc_Commands_Input) async throws -> Mozc_Commands_Output {

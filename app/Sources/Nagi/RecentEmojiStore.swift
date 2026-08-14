@@ -47,4 +47,11 @@ final class RecentEmojiStore {
         }
         defaults.set(list, forKey: Self.userDefaultsKey)
     }
+
+    /// #39: called from the settings window's "最近使った絵文字をリセット"
+    /// button. Only clears this one UserDefaults key — unrelated to
+    /// mozc's own history (CLEAR_USER_HISTORY etc.).
+    func clear() {
+        defaults.removeObject(forKey: Self.userDefaultsKey)
+    }
 }

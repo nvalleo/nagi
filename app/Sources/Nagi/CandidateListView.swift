@@ -11,6 +11,12 @@ import SwiftUI
 
 struct CandidateListView: View {
     @ObservedObject var state: CandidateListState
+    /// #39: observed via `@ObservedObject`, same as `state`, so a font
+    /// size change in the settings window reaches whatever candidate
+    /// window is currently on screen immediately rather than waiting for
+    /// the next keystroke — just reading `NagiSettings.shared` directly
+    /// wouldn't trigger a SwiftUI redraw.
+    @ObservedObject private var settings = NagiSettings.shared
 
     /// M3a (#13): was a step-change (`background(condition ? color :
     /// .clear)` with no animation) — the highlight jumped instantly
@@ -46,8 +52,17 @@ struct CandidateListView: View {
     // "compute a slice that contains it", recomputed fresh on every
     // `focusedID` change like any other SwiftUI state.
     private static let maxVisibleRows: CGFloat = 10
-    private static let approximateRowHeight: CGFloat = 25
-    private static let maxListHeight = maxVisibleRows * approximateRowHeight
+    /// #39: row height tracks `NagiSettings.shared.candidateFontSize`
+    /// (the settings window's "候補フォントサイズ"). `+10` is the offset
+    /// that reproduces the old hardcoded 25pt from the default 15pt — an
+    /// estimate for the row's vertical padding, not a measurement, same
+    /// as before this change. Just turning `static let` into `static
+    /// var` (a computed property) means every call site
+    /// (`maxListHeight`/`Row.height` etc.) keeps working unmodified.
+    private static var approximateRowHeight: CGFloat {
+        CGFloat(NagiSettings.shared.candidateFontSize) + 10
+    }
+    private static var maxListHeight: CGFloat { maxVisibleRows * approximateRowHeight }
 
     /// `.frame(maxHeight:)` below caps the *content* height, but adding
     /// it (or `body`'s own ideal height) doesn't cap what
@@ -56,7 +71,7 @@ struct CandidateListView: View {
     /// to this explicitly. `outerPadding` accounts for the `.padding(4)`
     /// around the list itself (4pt top + 4pt bottom).
     static let outerPadding: CGFloat = 8
-    static let maxPanelHeight = maxListHeight + outerPadding
+    static var maxPanelHeight: CGFloat { maxListHeight + outerPadding }
 
     /// M3d (#16): emoji/kaomoji candidates (`Candidate.isPictograph`,
     /// see `CandidateListState`) render as fixed-size grid cells instead
@@ -224,7 +239,7 @@ struct CandidateListView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 14, alignment: .trailing)
             Text(candidate.text)
-                .font(.system(size: 15))
+                .font(.system(size: settings.candidateFontSize))
             if candidate.hasSubCandidates {
                 // Visual cue that further variants (half/full-width
                 // etc., under "そのほかの文字種" and similar) are one
